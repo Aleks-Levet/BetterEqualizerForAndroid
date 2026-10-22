@@ -1,12 +1,18 @@
 <resources>
-    <string name="app_name">allEQ</string>
+    <string name="app_name">BetterEQ</string>
     
     <!-- Devices -->
     <string name="device_speaker">built-in speaker</string>
     <string name="device_bluetooth">bluetooth audio</string>
     <string name="device_wired">wired headphones</string>
     <string name="device_usb">usb-c audio</string>
-    
+    <string name="device_presets_header">DEVICE PRESETS</string>
+    <string name="device_presets_customize">Customize</string>
+    <string name="device_presets_dialog_title">CUSTOMIZE QUICK PRESETS</string>
+    <string name="device_presets_dialog_desc">Select 3 presets for quick access on this output device:</string>
+    <string name="active_output_header">ACTIVE OUTPUT</string>
+    <string name="eq_profile_active">EQ Profile Active</string>
+
     <!-- Top Bar & Main Controls -->
     <string name="btn_new_preset">new</string>
     <string name="hold_to_bypass">hold for a/b comparison</string>

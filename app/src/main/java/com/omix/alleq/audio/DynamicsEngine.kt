@@ -156,6 +156,7 @@ class DynamicsEngine(val audioSessionId: Int) {
         if (isInitialized) {
             updateBands(bandGains, bassBoostPercent)
             updateGainCompensation()
+            updateChannelVolumes(cachedLeftChannelVol, cachedRightChannelVol)
         }
         return isInitialized
     }
@@ -175,6 +176,7 @@ class DynamicsEngine(val audioSessionId: Int) {
             } else {
                 updateBands(cachedBandGains, cachedBassBoostPercent)
                 updateGainCompensation()
+                updateChannelVolumes(cachedLeftChannelVol, cachedRightChannelVol)
             }
         } catch (e: Exception) {
             Log.e(tag, "Error toggling enabled: ${e.message}")
@@ -324,6 +326,27 @@ class DynamicsEngine(val audioSessionId: Int) {
         }
     }
 
+    private var cachedLeftChannelVol: Float = 1.0f
+    private var cachedRightChannelVol: Float = 1.0f
+
+    fun updateChannelVolumes(leftVol: Float, rightVol: Float) {
+        cachedLeftChannelVol = leftVol
+        cachedRightChannelVol = rightVol
+        if (!isInitialized || !isEnabled) return
+
+        dpe?.let { dp ->
+            try {
+                val leftGainDb = if (leftVol <= 0.001f) -36f else (20f * kotlin.math.log10(leftVol.toDouble())).toFloat().coerceIn(-36f, 0f)
+                val rightGainDb = if (rightVol <= 0.001f) -36f else (20f * kotlin.math.log10(rightVol.toDouble())).toFloat().coerceIn(-36f, 0f)
+
+                dp.setInputGainbyChannel(0, leftGainDb)
+                dp.setInputGainbyChannel(1, rightGainDb)
+            } catch (e: Exception) {
+                Log.e(tag, "Error updating channel volumes: ${e.message}")
+            }
+        }
+    }
+
     private fun resetToFlat() {
         hwEq?.let { eq ->
             try {
@@ -347,6 +370,8 @@ class DynamicsEngine(val audioSessionId: Int) {
         }
         dpe?.let { dp ->
             try {
+                dp.setInputGainbyChannel(0, 0f)
+                dp.setInputGainbyChannel(1, 0f)
                 dp.enabled = false
             } catch (_: Exception) {}
         }

@@ -2,34 +2,43 @@
 
 <img src="art/icon.png" width="128" height="128" alt="allEQ Icon" />
 
-# allEQ (Русская версия)
+# allEQ (Форк)
 
 **Системный 10-полосный эквалайзер для Android без Root с алгоритмом Smart Dynamic Bass и тактильными слайдерами.**
 
-[![Релиз](https://img.shields.io/badge/Релиз-v1.0--alpha-10B981.svg?style=flat-square)](https://github.com/omixin/allEQ/releases)
-[![Telegram](https://img.shields.io/badge/Telegram-Чат-229ED9.svg?style=flat-square&logo=telegram&logoColor=white)](https://t.me/allEQoff)
+[![Релиз](https://img.shields.io/badge/Релиз-v1.0--alpha-10B981.svg?style=flat-square)](#)
 [![Android](https://img.shields.io/badge/Android-10%2B%20(API%2029%2B)-blue.svg?style=flat-square)](https://developer.android.com)
 [![Shizuku](https://img.shields.io/badge/Shizuku-Обязателен-8B5CF6.svg?style=flat-square)](https://shizuku.rikka.app)
 ![Офлайн](https://img.shields.io/badge/Сеть-100%25%20Офлайн-brightgreen.svg?style=flat-square)
 [![Лицензия](https://img.shields.io/badge/Лицензия-GPL--3.0-orange.svg?style=flat-square)](LICENSE)
 
-[**English**](README.md) • [**Русский**](README_RU.md) • [**Telegram-чат**](https://t.me/allEQoff)
+[**English**](README.md) • [**Русский**](README_RU.md)
 
 </div>
 
-> **Наш Telegram-чат:** Обсуждение проекта, тестирование свежих сборок и обмен пресетами — [**@allEQoff**](https://t.me/allEQoff).
+---
+
+> [!NOTE]  
+> **Информация о форке и благодарности:** Этот репозиторий является форком оригинального приложения [**allEQ**](https://github.com/omixin/allEQ), разработанного [**@omixin**](https://github.com/omixin). Все права на исходную архитектуру и аудио-движок принадлежат автору оригинала. Данный форк ориентирован на доработку и очистку интерфейса (UI/UX), а также добавление новых возможностей.
+
+---
+
+## План развития и цели форка
+
+* 🎨 **Очистка и обновление UI / UX:** Модернизация макета, визуальной иерархии, элементов управления и анимаций.
+* ⚡ **Новые функции:** Запланировано расширение возможностей настройки звука, управления пресетами и пользовательских параметров.
+* 🛡️ **Сохранение ключевых принципов:** 100% офлайн-работа, отсутствие трекеров и работу через Shizuku без Root-прав.
 
 ---
 
 ## Что это такое
 
-**allEQ** — это открытый системный аудио-эквалайзер для Android, разработанный на базе современного Jetpack Compose с использованием привилегий [Shizuku](https://shizuku.rikka.app).
+**allEQ** — это открытый системный аудио-эквалайзер для Android, разработанный на базе современного Jetpack Compose с использованием [Shizuku](https://shizuku.rikka.app).
 
 Приложение подключается напрямую к аппаратному уровню вывода звука Android HAL (`Session 0`), обеспечивая общесистемную коррекцию звука с минимальной задержкой для встроенных динамиков, проводных наушников, беспроводных гарнитур (Bluetooth A2DP) и внешних USB-ЦАП без необходимости получать Root-права.
 
-* **Имя пакета:** `com.omix.alleq`
-* **Автор:** [@omixin](https://github.com/omixin)
-* **Стек:** Kotlin, Jetpack Compose, Material 3, Android DynamicsProcessing & AudioEffects API
+* **Архитектура:** 100% Kotlin, Jetpack Compose, Material 3, Android DynamicsProcessing & AudioEffects API
+* **Оригинальный проект:** [omixin/allEQ](https://github.com/omixin/allEQ) от [@omixin](https://github.com/omixin)
 
 ---
 
@@ -94,7 +103,7 @@
 ## Быстрый старт
 
 1. Установите и запустите [Shizuku](https://shizuku.rikka.app) на смартфоне (через Беспроводную отладку по Wi-Fi или через ПК).
-2. Скачайте и установите файл `allEQ-v1.0-alpha.apk` со страницы [Релизов](https://github.com/omixin/allEQ/releases).
+2. Скачайте и установите свежую версию APK.
 3. Запустите allEQ и подтвердите выдачу прав Shizuku во всплывающем окне.
 4. Нажмите кнопку питания в верхнем углу для включения системного эквалайзера!
 
@@ -116,13 +125,8 @@ cd allEQ
 
 ---
 
-## Лицензия
+## Благодарности и Лицензия
 
-Проект `allEQ` распространяется под лицензией **GNU General Public License v3.0 (GPL-3.0)**.  
-Подробности доступны в файле [LICENSE](LICENSE).
+* **Оригинальный проект:** Разработан [**@omixin**](https://github.com/omixin) ([omixin/allEQ](https://github.com/omixin/allEQ)).
+* **Лицензия:** Распространяется на условиях **GNU General Public License v3.0 (GPL-3.0)**. Подробности в файле [LICENSE](LICENSE).
 
----
-
-<div align="center">
-Разработано с душой — <b><a href="https://github.com/omixin">@omixin</a></b>
-</div>

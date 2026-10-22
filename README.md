@@ -2,22 +2,32 @@
 
 <img src="art/icon.png" width="128" height="128" alt="allEQ Icon" />
 
-# allEQ
+# allEQ (Fork)
 
 **Rootless 10-band system equalizer for Android with Smart Dynamic Bass and tactile mixing controls.**
 
-[![Release](https://img.shields.io/badge/Release-v1.0--alpha-10B981.svg?style=flat-square)](https://github.com/omixin/allEQ/releases)
-[![Telegram](https://img.shields.io/badge/Telegram-Chat-229ED9.svg?style=flat-square&logo=telegram&logoColor=white)](https://t.me/allEQoff)
+[![Release](https://img.shields.io/badge/Release-v1.0--alpha-10B981.svg?style=flat-square)](#)
 [![Android](https://img.shields.io/badge/Android-10%2B%20(API%2029%2B)-blue.svg?style=flat-square)](https://developer.android.com)
 [![Shizuku](https://img.shields.io/badge/Shizuku-Required-8B5CF6.svg?style=flat-square)](https://shizuku.rikka.app)
 ![Offline](https://img.shields.io/badge/Network-100%25%20Offline-brightgreen.svg?style=flat-square)
 [![License](https://img.shields.io/badge/License-GPL--3.0-orange.svg?style=flat-square)](LICENSE)
 
-[**English**](README.md) • [**Русский**](README_RU.md) • [**Telegram Chat**](https://t.me/allEQoff)
+[**English**](README.md) • [**Русский**](README_RU.md)
 
 </div>
 
-> **Telegram Community:** Join discussions, beta testing, and presets sharing in our official Telegram chat — [**@allEQoff**](https://t.me/allEQoff).
+---
+
+> [!NOTE]
+> **Fork Notice & Credits:** This repository is a fork of [**allEQ**](https://github.com/omixin/allEQ) originally created by [**@omixin**](https://github.com/omixin). All primary credit for the original audio DSP engine and architecture belongs to the original author. This fork focuses on UI/UX cleanups, design enhancements, and upcoming new features.
+
+---
+
+## Roadmap & Fork Goals
+
+* 🎨 **UI / UX Cleanup:** Modernizing the layout, visual hierarchy, controls, and animations for a cleaner aesthetic.
+* ⚡ **Feature Additions:** Planned additions for enhanced sound tailoring, expanded preset management, and custom user controls.
+* 🛡️ **Maintain Core Principles:** Keeping 100% offline privacy, zero trackers, and rootless Shizuku operation intact.
 
 ---
 
@@ -27,9 +37,8 @@
 
 It attaches directly to the Android Audio HAL (`Session 0`) to provide low-latency, system-wide acoustic correction for built-in speakers, wired headphones, Bluetooth headsets, and external USB DACs.
 
-* **Package name:** `com.omix.alleq`
-* **Maintainer:** [@omixin](https://github.com/omixin)
 * **Architecture:** 100% Kotlin, Jetpack Compose, Material 3, Android DynamicsProcessing & AudioEffects API
+* **Original Project:** [omixin/allEQ](https://github.com/omixin/allEQ) by [@omixin](https://github.com/omixin)
 
 ---
 
@@ -73,7 +82,7 @@ Most existing equalizer applications on Android face one of three fundamental pr
 * **Speech Leveller & Vocal Guard:** Baseline gain floor and mid-band lift to keep dialogue crisp across videos with varying sound masterings.
 * **Instant A/B Bypass:** Hold the comparison button to temporarily bypass all DSP processing and compare directly with the uncolored sound.
 
-### Interface & Theming
+### Interface & Customization
 * **Expressive Studio UI:** Benzin bold headers and Wix Madefor Display body typography inspired by studio mixing consoles.
 * **Color Accents:** Emerald Green, Electric Cyan, Vivid Orange, Studio Purple, System Material You, or Custom Hex Accent.
 * **UI Scaling:** Three density presets (Compact 85%, Standard 100%, Large 115%) ensuring comfortable hitboxes on both compact phones and large displays.
@@ -99,7 +108,7 @@ Most existing equalizer applications on Android face one of three fundamental pr
 ## Quick Setup Guide
 
 1. Install and start [Shizuku](https://shizuku.rikka.app) on your device (via Wireless Debugging or USB ADB from a PC).
-2. Download and install `allEQ-v1.0-alpha.apk` from [Releases](https://github.com/omixin/allEQ/releases).
+2. Download and install the latest APK release.
 3. Launch allEQ and grant Shizuku permissions when prompted.
 4. Tap the power button to activate system-wide equalization!
 
@@ -121,7 +130,7 @@ cd allEQ
 # Build debug APK
 ./gradlew assembleDebug
 
-# Build optimized release APK
+# Build release APK
 ./gradlew assembleRelease
 ```
 
@@ -130,13 +139,8 @@ The output signed APK will be located at:
 
 ---
 
-## License
+## Credits & License
 
-`allEQ` is distributed under the terms of the **GNU General Public License v3.0 (GPL-3.0)**.  
-See the [LICENSE](LICENSE) file for the full license text.
+* **Original Project:** Developed by [**@omixin**](https://github.com/omixin) ([omixin/allEQ](https://github.com/omixin/allEQ)).
+* **License:** Distributed under the terms of the **GNU General Public License v3.0 (GPL-3.0)**. See [LICENSE](LICENSE) for details.
 
----
-
-<div align="center">
-Developed with passion by <b><a href="https://github.com/omixin">@omixin</a></b>
-</div>

@@ -13,6 +13,6 @@ class ExampleInstrumentedTest {
     @Test
     fun useAppContext() {
         val appContext = InstrumentationRegistry.getInstrumentation().targetContext
-        assertEquals("com.omix.alleq", appContext.packageName)
+        assertEquals("com.better.eq.by.aleks", appContext.packageName)
     }
 }

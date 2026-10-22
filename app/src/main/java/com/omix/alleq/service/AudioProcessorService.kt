@@ -101,6 +101,15 @@ class AudioProcessorService : Service() {
         private val _currentAudioDevice = MutableStateFlow("Speaker")
         val currentAudioDevice: StateFlow<String> = _currentAudioDevice.asStateFlow()
 
+        private val _currentAudioDeviceKey = MutableStateFlow("speaker")
+        val currentAudioDeviceKey: StateFlow<String> = _currentAudioDeviceKey.asStateFlow()
+
+        private val _currentAudioDeviceType = MutableStateFlow("SPEAKER")
+        val currentAudioDeviceType: StateFlow<String> = _currentAudioDeviceType.asStateFlow()
+
+        private val _currentDevicePresets = MutableStateFlow<List<String>>(listOf("Flat", "Bass Punch", "Vocal Clarity"))
+        val currentDevicePresets: StateFlow<List<String>> = _currentDevicePresets.asStateFlow()
+
         private val _isTemporaryBypass = MutableStateFlow(false)
         val isTemporaryBypass: StateFlow<Boolean> = _isTemporaryBypass.asStateFlow()
 
@@ -115,6 +124,12 @@ class AudioProcessorService : Service() {
 
         private val _dynamicBassModeStatus = MutableStateFlow("Standby")
         val dynamicBassModeStatus: StateFlow<String> = _dynamicBassModeStatus.asStateFlow()
+
+        private val _leftChannelVolume = MutableStateFlow(1.0f)
+        val leftChannelVolume: StateFlow<Float> = _leftChannelVolume.asStateFlow()
+
+        private val _rightChannelVolume = MutableStateFlow(1.0f)
+        val rightChannelVolume: StateFlow<Float> = _rightChannelVolume.asStateFlow()
     }
 
     private var deviceCallback: AudioDeviceCallback? = null
@@ -207,21 +222,54 @@ class AudioProcessorService : Service() {
         val devices = audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
         val activeDevice = devices.firstOrNull { dev ->
             dev.type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP ||
+            dev.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
+            (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && dev.type == AudioDeviceInfo.TYPE_BLE_HEADSET) ||
             dev.type == AudioDeviceInfo.TYPE_WIRED_HEADSET ||
             dev.type == AudioDeviceInfo.TYPE_WIRED_HEADPHONES ||
-            dev.type == AudioDeviceInfo.TYPE_USB_HEADSET
+            dev.type == AudioDeviceInfo.TYPE_USB_HEADSET ||
+            dev.type == AudioDeviceInfo.TYPE_USB_DEVICE
         } ?: devices.firstOrNull { it.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER }
 
         isSpeakerOutput = activeDevice == null || activeDevice.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER
-        val desc = when (activeDevice?.type) {
-            AudioDeviceInfo.TYPE_BUILTIN_SPEAKER -> getString(R.string.device_speaker)
-            AudioDeviceInfo.TYPE_BLUETOOTH_A2DP, AudioDeviceInfo.TYPE_BLUETOOTH_SCO -> getString(R.string.device_bluetooth)
-            AudioDeviceInfo.TYPE_WIRED_HEADSET, AudioDeviceInfo.TYPE_WIRED_HEADPHONES -> getString(R.string.device_wired)
-            AudioDeviceInfo.TYPE_USB_HEADSET, AudioDeviceInfo.TYPE_USB_DEVICE -> getString(R.string.device_usb)
-            else -> getString(R.string.device_speaker)
+
+        val (deviceKey, deviceType, deviceName) = when {
+            activeDevice == null || activeDevice.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER -> {
+                Triple("speaker", "SPEAKER", getString(R.string.device_speaker))
+            }
+            activeDevice.type == AudioDeviceInfo.TYPE_WIRED_HEADSET || activeDevice.type == AudioDeviceInfo.TYPE_WIRED_HEADPHONES -> {
+                Triple("wired", "WIRED", getString(R.string.device_wired))
+            }
+            activeDevice.type == AudioDeviceInfo.TYPE_USB_HEADSET || activeDevice.type == AudioDeviceInfo.TYPE_USB_DEVICE -> {
+                Triple("usb", "USB", getString(R.string.device_usb))
+            }
+            activeDevice.type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP || activeDevice.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
+            (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && activeDevice.type == AudioDeviceInfo.TYPE_BLE_HEADSET) -> {
+                val productName = activeDevice.productName?.toString()?.trim()?.takeIf { it.isNotBlank() } ?: "Bluetooth"
+                val address = activeDevice.address?.trim()?.takeIf { it.isNotBlank() } ?: productName
+                val cleanKey = "bt_" + address.replace(Regex("[^a-zA-Z0-9_]"), "_").lowercase()
+                val displayName = if (productName.lowercase().contains("bluetooth")) productName else "Bluetooth: $productName"
+                Triple(cleanKey, "BLUETOOTH", displayName)
+            }
+            else -> {
+                Triple("speaker", "SPEAKER", getString(R.string.device_speaker))
+            }
         }
-        _currentAudioDevice.value = desc
-        AppLogger.log(tag, "Audio output: $desc")
+
+        val previousKey = _currentAudioDeviceKey.value
+        _currentAudioDevice.value = deviceName
+        _currentAudioDeviceType.value = deviceType
+
+        if (previousKey != deviceKey) {
+            AppLogger.log(tag, "Audio output switched: $previousKey -> $deviceKey ($deviceName)")
+            if (previousKey.isNotEmpty()) {
+                writeSettingsToDisk(previousKey)
+            }
+            _currentAudioDeviceKey.value = deviceKey
+            loadDeviceSettings(deviceKey)
+            applyCurrentDspSettingsToEngines()
+        }
+
+        AppLogger.log(tag, "Audio output: $deviceName (Key: $deviceKey, Type: $deviceType)")
         updateDynamicBass()
     }
 
@@ -530,6 +578,7 @@ class AudioProcessorService : Service() {
                 isEnabled = isSessionActive
             )
             if (success) {
+                engine.updateChannelVolumes(_leftChannelVolume.value, _rightChannelVolume.value)
                 engines[sessionId] = engine
                 _activeSessionsCount.value = engines.size
                 AppLogger.log(tag, "Engine connected to session $sessionId (Total active: ${engines.size})")
@@ -553,26 +602,12 @@ class AudioProcessorService : Service() {
     private fun loadSavedSettings() {
         val prefs = getSharedPreferences("alleq_audio_state", Context.MODE_PRIVATE)
         _isEnabled.value = prefs.getBoolean("is_enabled", true)
-        _preAmpDb.value = prefs.getFloat("pre_amp_db", 0f)
-        _bassBoostPercent.value = prefs.getFloat("bass_boost_percent", 0f)
-        _limiterEnabled.value = prefs.getBoolean("limiter_enabled", false)
-        _activePresetName.value = prefs.getString("preset_name", "Flat") ?: "Flat"
         _dynamicBassEnabled.value = prefs.getBoolean("dynamic_bass_enabled", true)
         _dynamicBassStrength.value = prefs.getFloat("dynamic_bass_strength", 0.6f)
+        _leftChannelVolume.value = prefs.getFloat("left_channel_volume", 1.0f)
+        _rightChannelVolume.value = prefs.getFloat("right_channel_volume", 1.0f)
 
-        TelemetryManager.currentPreset = _activePresetName.value
         TelemetryManager.isDspEnabled = _isEnabled.value
-
-        val gainsStr = prefs.getString("band_gains", null)
-        if (gainsStr != null) {
-            try {
-                val parsed = gainsStr.split(",").map { it.toFloat() }
-                if (parsed.size == 10) {
-                    _bandGains.value = parsed
-                }
-            } catch (_: Exception) {
-            }
-        }
 
         val savedAllJson = prefs.getString("all_presets_json", null)
         if (!savedAllJson.isNullOrBlank()) {
@@ -591,6 +626,67 @@ class AudioProcessorService : Service() {
         val deletedJson = prefs.getString("deleted_presets_json", null)
         _deletedPresets.value = EqualizerDefaults.allPresetsFromJson(deletedJson)
         _customPresets.value = _allPresets.value.filter { it.isCustom }
+
+        loadDeviceSettings(_currentAudioDeviceKey.value)
+    }
+
+    private fun loadDeviceSettings(deviceKey: String) {
+        val prefs = getSharedPreferences("alleq_audio_state", Context.MODE_PRIVATE)
+        val prefix = "dev_${deviceKey}_"
+
+        val defaultChipPresets = when {
+            deviceKey.startsWith("bt_") -> listOf("Club", "Rock", "Cinematic")
+            deviceKey == "wired" -> listOf("Acoustic", "Vocal Clarity", "Rock")
+            else -> listOf("Flat", "Bass Punch", "Vocal Clarity")
+        }
+
+        if (prefs.contains("${prefix}preset_name")) {
+            _preAmpDb.value = prefs.getFloat("${prefix}pre_amp_db", 0f)
+            _bassBoostPercent.value = prefs.getFloat("${prefix}bass_boost_percent", 0f)
+            _limiterEnabled.value = prefs.getBoolean("${prefix}limiter_enabled", false)
+            _activePresetName.value = prefs.getString("${prefix}preset_name", "Flat") ?: "Flat"
+
+            val gainsStr = prefs.getString("${prefix}band_gains", null)
+            if (gainsStr != null) {
+                try {
+                    val parsed = gainsStr.split(",").map { it.toFloat() }
+                    if (parsed.size == 10) {
+                        _bandGains.value = parsed
+                    }
+                } catch (_: Exception) {}
+            }
+
+            val chipsStr = prefs.getString("${prefix}chip_presets", null)
+            if (!chipsStr.isNullOrBlank()) {
+                val parsed = chipsStr.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+                if (parsed.size == 3) {
+                    _currentDevicePresets.value = parsed
+                } else {
+                    _currentDevicePresets.value = defaultChipPresets
+                }
+            } else {
+                _currentDevicePresets.value = defaultChipPresets
+            }
+        } else {
+            _preAmpDb.value = prefs.getFloat("pre_amp_db", 0f)
+            _bassBoostPercent.value = prefs.getFloat("bass_boost_percent", 0f)
+            _limiterEnabled.value = prefs.getBoolean("limiter_enabled", false)
+            _activePresetName.value = prefs.getString("preset_name", "Flat") ?: "Flat"
+
+            val gainsStr = prefs.getString("band_gains", null)
+            if (gainsStr != null) {
+                try {
+                    val parsed = gainsStr.split(",").map { it.toFloat() }
+                    if (parsed.size == 10) {
+                        _bandGains.value = parsed
+                    }
+                } catch (_: Exception) {}
+            }
+            _currentDevicePresets.value = defaultChipPresets
+            writeSettingsToDisk(deviceKey)
+        }
+
+        TelemetryManager.currentPreset = _activePresetName.value
     }
 
     private fun saveSettings(debounce: Boolean = false) {
@@ -606,8 +702,9 @@ class AudioProcessorService : Service() {
         }
     }
 
-    private fun writeSettingsToDisk() {
+    private fun writeSettingsToDisk(deviceKey: String = _currentAudioDeviceKey.value) {
         val prefs = getSharedPreferences("alleq_audio_state", Context.MODE_PRIVATE)
+        val prefix = "dev_${deviceKey}_"
         prefs.edit()
             .putBoolean("is_enabled", _isEnabled.value)
             .putFloat("pre_amp_db", _preAmpDb.value)
@@ -617,7 +714,48 @@ class AudioProcessorService : Service() {
             .putString("band_gains", _bandGains.value.joinToString(","))
             .putBoolean("dynamic_bass_enabled", _dynamicBassEnabled.value)
             .putFloat("dynamic_bass_strength", _dynamicBassStrength.value)
+            .putFloat("left_channel_volume", _leftChannelVolume.value)
+            .putFloat("right_channel_volume", _rightChannelVolume.value)
+            .putFloat("${prefix}pre_amp_db", _preAmpDb.value)
+            .putFloat("${prefix}bass_boost_percent", _bassBoostPercent.value)
+            .putBoolean("${prefix}limiter_enabled", _limiterEnabled.value)
+            .putString("${prefix}preset_name", _activePresetName.value)
+            .putString("${prefix}band_gains", _bandGains.value.joinToString(","))
+            .putString("${prefix}chip_presets", _currentDevicePresets.value.joinToString(","))
             .apply()
+    }
+
+    private fun applyCurrentDspSettingsToEngines() {
+        val gains = _bandGains.value
+        val preAmp = _preAmpDb.value
+        val bassBoost = _bassBoostPercent.value
+        val limiter = _limiterEnabled.value
+        engines.values.forEach { engine ->
+            engine.updatePreAmpAndLimiter(preAmp, limiter)
+            engine.updateBands(gains, bassBoost)
+        }
+        TelemetryManager.currentPreset = _activePresetName.value
+    }
+
+    fun setDevicePresetChips(chipPresets: List<String>) {
+        if (chipPresets.size == 3) {
+            _currentDevicePresets.value = chipPresets
+            writeSettingsToDisk()
+        }
+    }
+
+    fun setLeftChannelVolume(volume: Float) {
+        val clamped = volume.coerceIn(0f, 1f)
+        _leftChannelVolume.value = clamped
+        engines.values.forEach { it.updateChannelVolumes(clamped, _rightChannelVolume.value) }
+        saveSettings(debounce = true)
+    }
+
+    fun setRightChannelVolume(volume: Float) {
+        val clamped = volume.coerceIn(0f, 1f)
+        _rightChannelVolume.value = clamped
+        engines.values.forEach { it.updateChannelVolumes(_leftChannelVolume.value, clamped) }
+        saveSettings(debounce = true)
     }
 
     private fun savePresetLists() {
