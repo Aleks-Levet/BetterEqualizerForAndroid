@@ -194,7 +194,7 @@ class AudioProcessorService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val stateText = if (_isEnabled.value) getString(R.string.notif_enabled, _activePresetName.value) else getString(R.string.notif_disabled)
+        val stateText = if (_isEnabled.value) getString(R.string.notif_enabled, currentPresetDisplayName()) else getString(R.string.notif_disabled)
         val toggleActionText = if (_isEnabled.value) getString(R.string.notif_action_disable) else getString(R.string.notif_action_enable)
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
@@ -240,13 +240,25 @@ class AudioProcessorService : Service() {
             (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && activeDevice.type == AudioDeviceInfo.TYPE_BLE_HEADSET) -> {
                 val productName = activeDevice.productName?.toString()?.trim()?.takeIf { it.isNotBlank() } ?: "Bluetooth"
                 val address = activeDevice.address?.trim()?.takeIf { it.isNotBlank() } ?: productName
-                val cleanKey = "bt_" + address.replace(Regex("[^a-zA-Z0-9_]"), "_").lowercase()
+                val cleanName = sanitizeDeviceKeyComponent(productName)
+                val cleanAddress = sanitizeDeviceKeyComponent(address)
+                val cleanKey = "bt_${cleanName}_$cleanAddress"
                 val displayName = if (productName.lowercase().contains("bluetooth")) productName else "Bluetooth: $productName"
                 Triple(cleanKey, "BLUETOOTH", displayName)
             }
             else -> {
                 Triple("speaker", "SPEAKER", getString(R.string.device_speaker))
             }
+        }
+
+        val legacyDeviceKey = activeDevice?.takeIf { device ->
+            device.type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP ||
+                device.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
+                (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && device.type == AudioDeviceInfo.TYPE_BLE_HEADSET)
+        }?.let { device ->
+            val productName = device.productName?.toString()?.trim()?.takeIf { it.isNotBlank() } ?: "Bluetooth"
+            val address = device.address?.trim()?.takeIf { it.isNotBlank() } ?: productName
+            "bt_${sanitizeDeviceKeyComponent(address)}"
         }
 
         val previousKey = _currentAudioDeviceKey.value
@@ -259,12 +271,15 @@ class AudioProcessorService : Service() {
                 writeSettingsToDisk(previousKey)
             }
             _currentAudioDeviceKey.value = deviceKey
-            loadDeviceSettings(deviceKey)
+            loadDeviceSettings(deviceKey, legacyDeviceKey)
             applyCurrentDspSettingsToEngines()
         }
 
         AppLogger.log(tag, "Audio output: $deviceName (Key: $deviceKey, Type: $deviceType)")
     }
+
+    private fun sanitizeDeviceKeyComponent(value: String): String =
+        value.replace(Regex("[^a-zA-Z0-9_]"), "_").lowercase()
 
     private fun registerVolumeReceiver() {
         volumeReceiver = object : BroadcastReceiver() {
@@ -601,9 +616,39 @@ class AudioProcessorService : Service() {
         loadDeviceSettings(_currentAudioDeviceKey.value)
     }
 
-    private fun loadDeviceSettings(deviceKey: String) {
+    private fun loadDeviceSettings(deviceKey: String, legacyDeviceKey: String? = null) {
         val prefs = getSharedPreferences("alleq_audio_state", Context.MODE_PRIVATE)
         val prefix = "dev_${deviceKey}_"
+        if (legacyDeviceKey != null) {
+            val legacyPrefix = "dev_${legacyDeviceKey}_"
+            val settingKeys = listOf(
+                "pre_amp_db",
+                "bass_boost_percent",
+                "limiter_enabled",
+                "preset_name",
+                "band_gains",
+                "preset_slots_json",
+                "volume_aware_enabled",
+                "volume_curve_json"
+            )
+            val editor = prefs.edit()
+            var migratedSettings = false
+            settingKeys.forEach { key ->
+                val targetKey = "$prefix$key"
+                val legacyValue = prefs.all["$legacyPrefix$key"]
+                if (!prefs.contains(targetKey) && legacyValue != null) {
+                    when (legacyValue) {
+                        is Boolean -> editor.putBoolean(targetKey, legacyValue)
+                        is Float -> editor.putFloat(targetKey, legacyValue)
+                        is String -> editor.putString(targetKey, legacyValue)
+                    }
+                    migratedSettings = true
+                }
+            }
+            if (migratedSettings) {
+                editor.apply()
+            }
+        }
 
         val savedSlotsJson = prefs.getString("${prefix}preset_slots_json", null)
         _currentDevicePresetSlots.value = if (savedSlotsJson == null) {
@@ -619,7 +664,7 @@ class AudioProcessorService : Service() {
             _preAmpDb.value = prefs.getFloat("${prefix}pre_amp_db", 0f)
             _bassBoostPercent.value = prefs.getFloat("${prefix}bass_boost_percent", 0f)
             _limiterEnabled.value = prefs.getBoolean("${prefix}limiter_enabled", false)
-            _activePresetName.value = prefs.getString("${prefix}preset_name", "") ?: ""
+            _activePresetName.value = knownPresetSlotName(prefs.getString("${prefix}preset_name", null))
 
             val gainsStr = prefs.getString("${prefix}band_gains", null)
             if (gainsStr != null) {
@@ -634,7 +679,7 @@ class AudioProcessorService : Service() {
             _preAmpDb.value = prefs.getFloat("pre_amp_db", 0f)
             _bassBoostPercent.value = prefs.getFloat("bass_boost_percent", 0f)
             _limiterEnabled.value = prefs.getBoolean("limiter_enabled", false)
-            _activePresetName.value = prefs.getString("preset_name", "") ?: ""
+            _activePresetName.value = knownPresetSlotName(prefs.getString("preset_name", null))
 
             val gainsStr = prefs.getString("band_gains", null)
             if (gainsStr != null) {
@@ -652,7 +697,7 @@ class AudioProcessorService : Service() {
         val jsonCurve = prefs.getString("${prefix}volume_curve_json", null)
         _volumeCurvePoints.value = VolumeStepPoint.jsonListFromString(jsonCurve)
 
-        TelemetryManager.currentPreset = _activePresetName.value
+        TelemetryManager.currentPreset = currentPresetDisplayName()
         updateVolumeAwareEq()
     }
 
@@ -702,7 +747,7 @@ class AudioProcessorService : Service() {
             engine.updateBands(gains, bassBoost)
             engine.updateChannelVolumes(_leftChannelVolume.value, _rightChannelVolume.value)
         }
-        TelemetryManager.currentPreset = _activePresetName.value
+        TelemetryManager.currentPreset = currentPresetDisplayName()
     }
 
     fun setVolumeAwareEnabled(enabled: Boolean) {
@@ -919,13 +964,18 @@ class AudioProcessorService : Service() {
         }
         val slotName = targetSlotName
         _activePresetName.value = slotName
-        TelemetryManager.currentPreset = slotName
+        TelemetryManager.currentPreset = currentPresetDisplayName()
         saveSettings()
         updateNotification()
         AppLogger.log(tag, "Selected $slotName")
     }
 
     private fun presetSlotName(index: Int) = "Preset ${index + 1}"
+
+    private fun knownPresetSlotName(name: String?): String =
+        name?.takeIf { candidate -> (0 until EqualizerDefaults.PRESET_SLOT_COUNT).any { candidate == presetSlotName(it) } } ?: ""
+
+    private fun currentPresetDisplayName() = _activePresetName.value.ifBlank { "Manual" }
 
     private fun currentPresetSlotSettings() = EqualizerPresetSlot(
         bandGains = _bandGains.value.toList(),

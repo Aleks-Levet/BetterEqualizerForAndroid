@@ -11,8 +11,8 @@ A rootless Android equalizer for Android 10 and newer.
 
 - Adjusts ten EQ bands: 31 Hz through 16 kHz.
 - Combines pre-amp and channel balance into independent left/right volume sliders (0-200%), alongside Bass Boost.
-- Keeps separate settings for the active output type, such as speaker, wired headset, Bluetooth, or USB audio.
-- Offers three editable preset slots per output type; select a slot to switch and changes save automatically.
+- Keeps separate settings for the active audio output, with Bluetooth settings routed by device name and address.
+- Offers three editable preset slots per output; select a slot to switch and changes save automatically.
 - Lets you hold the A/B control to temporarily bypass processing.
 - Shows the active audio output and can copy a diagnostics report.
 - Runs its audio processor as a foreground media-playback service.
