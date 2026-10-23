@@ -183,21 +183,6 @@ class DynamicsEngine(val audioSessionId: Int) {
         }
     }
 
-    private var dynamicOffset31: Float = 0f
-    private var dynamicOffset62: Float = 0f
-    private var dynamicOffset125: Float = 0f
-    private var dynamicOffsetBassBoost: Float = 0f
-
-    fun updateDynamicBassOffsets(offset31: Float, offset62: Float, offset125: Float, offsetBassBoost: Float) {
-        dynamicOffset31 = offset31
-        dynamicOffset62 = offset62
-        dynamicOffset125 = offset125
-        dynamicOffsetBassBoost = offsetBassBoost
-        if (!isEnabled || !isInitialized) return
-
-        updateBands(cachedBandGains, cachedBassBoostPercent)
-    }
-
     private var cachedBassBoostPercent: Float = 0f
 
     fun updateBands(bandGains: List<Float>, bassBoostPercent: Float) {
@@ -228,15 +213,9 @@ class DynamicsEngine(val audioSessionId: Int) {
                         abs(it.frequencyHz - centerFreqHz)
                     }
                     val gainDb = nearestBand?.let { bandGains.getOrElse(it.index) { 0f } } ?: 0f
-                    val dynGain = when (nearestBand?.index) {
-                        0 -> dynamicOffset31
-                        1 -> dynamicOffset62
-                        2 -> dynamicOffset125
-                        else -> 0f
-                    }
                     val extraBass = if (hwBass == null && centerFreqHz in 100..250) (bassBoostPercent / 100f) * 4f else 0f
                     val speechBoost = if (centerFreqHz in 800..3000) vocalPreservation else 0f
-                    val targetMilliBels = ((gainDb + dynGain + extraBass + speechBoost) * 100).toInt().toShort().coerceIn(minLevel, maxLevel)
+                    val targetMilliBels = ((gainDb + extraBass + speechBoost) * 100).toInt().toShort().coerceIn(minLevel, maxLevel)
                     eq.setBandLevel(b.toShort(), targetMilliBels)
                 }
             } catch (e: Exception) {
@@ -247,7 +226,7 @@ class DynamicsEngine(val audioSessionId: Int) {
         hwBass?.let { bb ->
             try {
                 if (bb.strengthSupported) {
-                    val totalPercent = (bassBoostPercent + dynamicOffsetBassBoost).coerceIn(0f, 100f)
+                    val totalPercent = bassBoostPercent.coerceIn(0f, 100f)
                     bb.enabled = isEnabled && (totalPercent > 0f)
                     bb.setStrength((totalPercent * 10f).toInt().toShort().coerceIn(0, 1000))
                 }
@@ -268,17 +247,9 @@ class DynamicsEngine(val audioSessionId: Int) {
 
         val speechLevellerFloor = 3.5f
 
-        val maxBandBoost = (cachedBandGains.mapIndexed { idx, g ->
-            val dyn = when (idx) {
-                0 -> dynamicOffset31
-                1 -> dynamicOffset62
-                2 -> dynamicOffset125
-                else -> 0f
-            }
-            g + dyn
-        }.maxOrNull() ?: 0f).coerceAtLeast(0f)
+        val maxBandBoost = (cachedBandGains.maxOrNull() ?: 0f).coerceAtLeast(0f)
 
-        val totalBassBoost = (cachedBassBoostPercent + dynamicOffsetBassBoost).coerceIn(0f, 100f)
+        val totalBassBoost = cachedBassBoostPercent.coerceIn(0f, 100f)
         val bassBoostCompensation = (totalBassBoost / 100f) * 3.5f
 
         val maxBoostDb = maxOf(maxBandBoost, bassBoostCompensation)

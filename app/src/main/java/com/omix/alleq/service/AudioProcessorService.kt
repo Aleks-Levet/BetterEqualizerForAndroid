@@ -27,6 +27,7 @@ import com.omix.alleq.audio.DynamicsEngine
 import com.omix.alleq.logger.AppLogger
 import com.omix.alleq.model.EqualizerDefaults
 import com.omix.alleq.model.EqualizerPreset
+import com.omix.alleq.model.VolumeStepPoint
 import com.omix.alleq.telemetry.TelemetryManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -113,23 +114,26 @@ class AudioProcessorService : Service() {
         private val _isTemporaryBypass = MutableStateFlow(false)
         val isTemporaryBypass: StateFlow<Boolean> = _isTemporaryBypass.asStateFlow()
 
-        private val _dynamicBassEnabled = MutableStateFlow(true)
-        val dynamicBassEnabled: StateFlow<Boolean> = _dynamicBassEnabled.asStateFlow()
-
-        private val _dynamicBassStrength = MutableStateFlow(0.6f)
-        val dynamicBassStrength: StateFlow<Float> = _dynamicBassStrength.asStateFlow()
-
-        private val _currentVolumeRatio = MutableStateFlow(1.0f)
-        val currentVolumeRatio: StateFlow<Float> = _currentVolumeRatio.asStateFlow()
-
-        private val _dynamicBassModeStatus = MutableStateFlow("Standby")
-        val dynamicBassModeStatus: StateFlow<String> = _dynamicBassModeStatus.asStateFlow()
-
         private val _leftChannelVolume = MutableStateFlow(1.0f)
         val leftChannelVolume: StateFlow<Float> = _leftChannelVolume.asStateFlow()
 
         private val _rightChannelVolume = MutableStateFlow(1.0f)
         val rightChannelVolume: StateFlow<Float> = _rightChannelVolume.asStateFlow()
+
+        private val _isVolumeAwareEnabled = MutableStateFlow(false)
+        val isVolumeAwareEnabled: StateFlow<Boolean> = _isVolumeAwareEnabled.asStateFlow()
+
+        private val _currentVolumeStep = MutableStateFlow(0)
+        val currentVolumeStep: StateFlow<Int> = _currentVolumeStep.asStateFlow()
+
+        private val _maxVolumeStep = MutableStateFlow(15)
+        val maxVolumeStep: StateFlow<Int> = _maxVolumeStep.asStateFlow()
+
+        private val _volumeCurvePoints = MutableStateFlow<List<VolumeStepPoint>>(emptyList())
+        val volumeCurvePoints: StateFlow<List<VolumeStepPoint>> = _volumeCurvePoints.asStateFlow()
+
+        private val _lastAdjustedParameterId = MutableStateFlow("band_0")
+        val lastAdjustedParameterId: StateFlow<String> = _lastAdjustedParameterId.asStateFlow()
     }
 
     private var deviceCallback: AudioDeviceCallback? = null
@@ -149,7 +153,6 @@ class AudioProcessorService : Service() {
         registerVolumeReceiver()
         registerModeListener()
         updateAudioDeviceDescription()
-        updateDynamicBass()
         AppLogger.log(tag, "AudioProcessorService started successfully")
     }
 
@@ -270,14 +273,13 @@ class AudioProcessorService : Service() {
         }
 
         AppLogger.log(tag, "Audio output: $deviceName (Key: $deviceKey, Type: $deviceType)")
-        updateDynamicBass()
     }
 
     private fun registerVolumeReceiver() {
         volumeReceiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context?, intent: Intent?) {
                 if (intent?.action == "android.media.VOLUME_CHANGED_ACTION") {
-                    updateDynamicBass()
+                    updateVolumeAwareEq()
                     if (audioManager.mode == AudioManager.MODE_NORMAL && engines[0]?.isHealthy() == false) {
                         resurrectSession0IfNeeded()
                     }
@@ -450,7 +452,6 @@ class AudioProcessorService : Service() {
             if (hasSpecificSessions) specificSessions.size else 1
         } else 0
 
-        updateDynamicBass()
         updateNotification()
     }
 
@@ -582,7 +583,6 @@ class AudioProcessorService : Service() {
                 engines[sessionId] = engine
                 _activeSessionsCount.value = engines.size
                 AppLogger.log(tag, "Engine connected to session $sessionId (Total active: ${engines.size})")
-                updateDynamicBass()
             }
         } catch (e: Exception) {
             AppLogger.log(tag, "Failed to attach session $sessionId: ${e.message}")
@@ -602,8 +602,6 @@ class AudioProcessorService : Service() {
     private fun loadSavedSettings() {
         val prefs = getSharedPreferences("alleq_audio_state", Context.MODE_PRIVATE)
         _isEnabled.value = prefs.getBoolean("is_enabled", true)
-        _dynamicBassEnabled.value = prefs.getBoolean("dynamic_bass_enabled", true)
-        _dynamicBassStrength.value = prefs.getFloat("dynamic_bass_strength", 0.6f)
         _leftChannelVolume.value = prefs.getFloat("left_channel_volume", 1.0f)
         _rightChannelVolume.value = prefs.getFloat("right_channel_volume", 1.0f)
 
@@ -686,7 +684,12 @@ class AudioProcessorService : Service() {
             writeSettingsToDisk(deviceKey)
         }
 
+        _isVolumeAwareEnabled.value = prefs.getBoolean("${prefix}volume_aware_enabled", false)
+        val jsonCurve = prefs.getString("${prefix}volume_curve_json", null)
+        _volumeCurvePoints.value = VolumeStepPoint.jsonListFromString(jsonCurve)
+
         TelemetryManager.currentPreset = _activePresetName.value
+        updateVolumeAwareEq()
     }
 
     private fun saveSettings(debounce: Boolean = false) {
@@ -712,8 +715,6 @@ class AudioProcessorService : Service() {
             .putBoolean("limiter_enabled", _limiterEnabled.value)
             .putString("preset_name", _activePresetName.value)
             .putString("band_gains", _bandGains.value.joinToString(","))
-            .putBoolean("dynamic_bass_enabled", _dynamicBassEnabled.value)
-            .putFloat("dynamic_bass_strength", _dynamicBassStrength.value)
             .putFloat("left_channel_volume", _leftChannelVolume.value)
             .putFloat("right_channel_volume", _rightChannelVolume.value)
             .putFloat("${prefix}pre_amp_db", _preAmpDb.value)
@@ -722,6 +723,8 @@ class AudioProcessorService : Service() {
             .putString("${prefix}preset_name", _activePresetName.value)
             .putString("${prefix}band_gains", _bandGains.value.joinToString(","))
             .putString("${prefix}chip_presets", _currentDevicePresets.value.joinToString(","))
+            .putBoolean("${prefix}volume_aware_enabled", _isVolumeAwareEnabled.value)
+            .putString("${prefix}volume_curve_json", VolumeStepPoint.jsonListToString(_volumeCurvePoints.value))
             .apply()
     }
 
@@ -733,8 +736,100 @@ class AudioProcessorService : Service() {
         engines.values.forEach { engine ->
             engine.updatePreAmpAndLimiter(preAmp, limiter)
             engine.updateBands(gains, bassBoost)
+            engine.updateChannelVolumes(_leftChannelVolume.value, _rightChannelVolume.value)
         }
         TelemetryManager.currentPreset = _activePresetName.value
+    }
+
+    fun setVolumeAwareEnabled(enabled: Boolean) {
+        _isVolumeAwareEnabled.value = enabled
+        if (enabled) {
+            updateVolumeAwareEq()
+        }
+        writeSettingsToDisk()
+        AppLogger.log(tag, "Volume-Aware EQ: ${if (enabled) "ENABLED" else "DISABLED"}")
+    }
+
+    fun setLastAdjustedParameter(paramId: String) {
+        _lastAdjustedParameterId.value = paramId
+    }
+
+    fun setVolumeCurvePoints(points: List<VolumeStepPoint>) {
+        _volumeCurvePoints.value = points.sortedBy { it.stepIndex }
+        writeSettingsToDisk()
+        if (_isVolumeAwareEnabled.value) {
+            updateVolumeAwareEq()
+        }
+    }
+
+    fun addOrUpdateVolumeStepPoint(point: VolumeStepPoint) {
+        val current = _volumeCurvePoints.value.filter { it.stepIndex != point.stepIndex }
+        _volumeCurvePoints.value = (current + point).sortedBy { it.stepIndex }
+        writeSettingsToDisk()
+        if (_isVolumeAwareEnabled.value) {
+            updateVolumeAwareEq()
+        }
+    }
+
+    fun deleteVolumeStepPoint(stepIndex: Int) {
+        _volumeCurvePoints.value = _volumeCurvePoints.value.filter { it.stepIndex != stepIndex }
+        writeSettingsToDisk()
+        if (_isVolumeAwareEnabled.value) {
+            updateVolumeAwareEq()
+        }
+    }
+
+    fun updateVolumeAwareEq() {
+        try {
+            val curVol = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
+            val maxVol = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1)
+            _currentVolumeStep.value = curVol
+            _maxVolumeStep.value = maxVol
+
+            if (!_isVolumeAwareEnabled.value || _isTemporaryBypass.value || !_isEnabled.value) {
+                return
+            }
+
+            val defaultPoint = VolumeStepPoint(
+                stepIndex = curVol,
+                bandGains = _bandGains.value,
+                preAmpDb = _preAmpDb.value,
+                bassBoostPercent = _bassBoostPercent.value,
+                leftChannelVolume = _leftChannelVolume.value,
+                rightChannelVolume = _rightChannelVolume.value,
+                presetName = _activePresetName.value
+            )
+
+            val calculated = VolumeStepPoint.calculateForVolumeStep(_volumeCurvePoints.value, curVol, defaultPoint)
+
+            _bandGains.value = calculated.bandGains
+            _preAmpDb.value = calculated.preAmpDb
+            _bassBoostPercent.value = calculated.bassBoostPercent
+            _leftChannelVolume.value = calculated.leftChannelVolume
+            _rightChannelVolume.value = calculated.rightChannelVolume
+            _activePresetName.value = calculated.presetName
+
+            applyCurrentDspSettingsToEngines()
+        } catch (e: Exception) {
+            AppLogger.log(tag, "Error in updateVolumeAwareEq: ${e.message}")
+        }
+    }
+
+    private fun syncCurrentStateToVolumePointIfNeeded() {
+        if (_isVolumeAwareEnabled.value && !_isTemporaryBypass.value) {
+            val stepIndex = _currentVolumeStep.value
+            val point = VolumeStepPoint(
+                stepIndex = stepIndex,
+                bandGains = _bandGains.value,
+                preAmpDb = _preAmpDb.value,
+                bassBoostPercent = _bassBoostPercent.value,
+                leftChannelVolume = _leftChannelVolume.value,
+                rightChannelVolume = _rightChannelVolume.value,
+                presetName = _activePresetName.value
+            )
+            val currentList = _volumeCurvePoints.value.filter { it.stepIndex != stepIndex }
+            _volumeCurvePoints.value = (currentList + point).sortedBy { it.stepIndex }
+        }
     }
 
     fun setDevicePresetChips(chipPresets: List<String>) {
@@ -748,6 +843,8 @@ class AudioProcessorService : Service() {
         val clamped = volume.coerceIn(0f, 1f)
         _leftChannelVolume.value = clamped
         engines.values.forEach { it.updateChannelVolumes(clamped, _rightChannelVolume.value) }
+        _lastAdjustedParameterId.value = "balance"
+        syncCurrentStateToVolumePointIfNeeded()
         saveSettings(debounce = true)
     }
 
@@ -755,6 +852,8 @@ class AudioProcessorService : Service() {
         val clamped = volume.coerceIn(0f, 1f)
         _rightChannelVolume.value = clamped
         engines.values.forEach { it.updateChannelVolumes(_leftChannelVolume.value, clamped) }
+        _lastAdjustedParameterId.value = "balance"
+        syncCurrentStateToVolumePointIfNeeded()
         saveSettings(debounce = true)
     }
 
@@ -792,6 +891,7 @@ class AudioProcessorService : Service() {
     fun updateBands(gains: List<Float>) {
         _bandGains.value = gains
         engines.values.forEach { it.updateBands(gains, _bassBoostPercent.value) }
+        syncCurrentStateToVolumePointIfNeeded()
         saveSettings(debounce = true)
     }
 
@@ -799,6 +899,7 @@ class AudioProcessorService : Service() {
         val current = _bandGains.value.toMutableList()
         if (index in current.indices) {
             current[index] = gain
+            _lastAdjustedParameterId.value = "band_$index"
             updateBands(current)
         }
     }
@@ -806,12 +907,16 @@ class AudioProcessorService : Service() {
     fun setPreAmp(db: Float) {
         _preAmpDb.value = db
         engines.values.forEach { it.updatePreAmpAndLimiter(db, _limiterEnabled.value) }
+        _lastAdjustedParameterId.value = "pre_amp"
+        syncCurrentStateToVolumePointIfNeeded()
         saveSettings(debounce = true)
     }
 
     fun setBassBoost(percent: Float) {
         _bassBoostPercent.value = percent
         engines.values.forEach { it.updateBands(_bandGains.value, percent) }
+        _lastAdjustedParameterId.value = "bass_boost"
+        syncCurrentStateToVolumePointIfNeeded()
         saveSettings(debounce = true)
     }
 
@@ -947,96 +1052,6 @@ class AudioProcessorService : Service() {
         deletePreset(name)
     }
 
-    fun setDynamicBassEnabled(enabled: Boolean) {
-        _dynamicBassEnabled.value = enabled
-        saveSettings()
-        updateDynamicBass()
-        AppLogger.log(tag, "Smart Dynamic Bass: ${if (enabled) "ON" else "OFF"}")
-    }
-
-    fun setDynamicBassStrength(strength: Float) {
-        _dynamicBassStrength.value = strength.coerceIn(0f, 1f)
-        saveSettings()
-        updateDynamicBass()
-    }
-
-    fun updateDynamicBass() {
-        try {
-            val currentVol = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
-            val maxVol = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1)
-            val ratio = (currentVol.toFloat() / maxVol.toFloat()).coerceIn(0f, 1f)
-            _currentVolumeRatio.value = ratio
-
-            val isSpeaker = isSpeakerOutput
-
-            if (!_isEnabled.value || _isTemporaryBypass.value) {
-                _dynamicBassModeStatus.value = if (_isTemporaryBypass.value) getString(R.string.dynamic_bass_status_bypass) else getString(R.string.dynamic_bass_status_master_off)
-                engines.values.forEach { it.updateDynamicBassOffsets(0f, 0f, 0f, 0f) }
-                return
-            }
-
-            if (!_dynamicBassEnabled.value) {
-                _dynamicBassModeStatus.value = getString(R.string.dynamic_bass_status_disabled)
-                engines.values.forEach { it.updateDynamicBassOffsets(0f, 0f, 0f, 0f) }
-                return
-            }
-
-            if (!isSpeaker) {
-                _dynamicBassModeStatus.value = getString(R.string.dynamic_bass_status_headphones)
-                engines.values.forEach { it.updateDynamicBassOffsets(0f, 0f, 0f, 0f) }
-                return
-            }
-
-            val strength = _dynamicBassStrength.value.coerceIn(0f, 1f)
-
-            // bass punch smoothstep between 45% and 80% volume
-            val factorPunch = when {
-                ratio <= 0.45f -> 1.0f
-                ratio >= 0.80f -> 0.0f
-                else -> {
-                    val t = (ratio - 0.45f) / (0.80f - 0.45f)
-                    1.0f - (t * t * (3.0f - 2.0f * t))
-                }
-            }
-
-            val punch62 = 5.0f * strength * factorPunch
-            val punch125 = 6.0f * strength * factorPunch
-            val punchBassBoost = 25.0f * strength * factorPunch
-
-            // excursion cut above 70% volume
-            val cutFactor = when {
-                ratio <= 0.70f -> 0.0f
-                ratio >= 1.0f -> 1.0f
-                else -> {
-                    val t = (ratio - 0.70f) / (1.0f - 0.70f)
-                    t * t * (3.0f - 2.0f * t)
-                }
-            }
-
-            val cut31 = -6.0f * cutFactor
-            val cut62 = -2.5f * cutFactor
-
-            val offset31 = cut31
-            val offset62 = punch62 + cut62
-            val offset125 = punch125
-            val offsetBassBoost = punchBassBoost
-
-            val percentVol = (ratio * 100).toInt()
-            _dynamicBassModeStatus.value = when {
-                ratio <= 0.45f -> getString(R.string.dynamic_bass_status_punch, punch125, percentVol)
-                ratio < 0.80f -> getString(R.string.dynamic_bass_status_adaptive, percentVol)
-                else -> getString(R.string.dynamic_bass_status_protection, cut31, percentVol)
-            }
-
-            engines.values.forEach {
-                it.updateDynamicBassOffsets(offset31, offset62, offset125, offsetBassBoost)
-            }
-            AppLogger.log(tag, "Smart Dynamic Bass: Vol=$percentVol% | 31Hz=${offset31.toInt()}dB 62Hz=${offset62.toInt()}dB 125Hz=${offset125.toInt()}dB BB=+${offsetBassBoost.toInt()}%")
-        } catch (e: Exception) {
-            AppLogger.log(tag, "Error in updateDynamicBass: ${e.message}")
-        }
-    }
-
     fun getDiagnosticsReport(): String {
         val s0Engine = engines[0]
         val hwStatus = s0Engine?.getEngineStatus() ?: "Session 0: Engine Offline"
@@ -1064,8 +1079,6 @@ class AudioProcessorService : Service() {
             appendLine("Bass Boost: ${_bassBoostPercent.value}%")
             appendLine("Limiter Status: ${if (_limiterEnabled.value) "ENABLED (0 dBFS)" else "BYPASSED"}")
             appendLine("Band Gains (31Hz..16kHz): ${_bandGains.value.map { it.toInt() }}")
-            appendLine("Smart Dynamic Bass: ${if (_dynamicBassEnabled.value) "ENABLED (Strength: ${(_dynamicBassStrength.value * 100).toInt()}%)" else "DISABLED"}")
-            appendLine("Dynamic Bass Status: ${_dynamicBassModeStatus.value} (Vol: ${(_currentVolumeRatio.value * 100).toInt()}%)")
             appendLine()
             appendLine("[RECENT EVENT JOURNAL (LAST 40)]")
             if (logs.isBlank()) {

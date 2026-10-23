@@ -206,8 +206,6 @@ class MainActivity : ComponentActivity() {
                     onBandChanged = { index, gain -> service?.updateBand(index, gain) },
                     onPreAmpChanged = { db -> service?.setPreAmp(db) },
                     onBassBoostChanged = { percent -> service?.setBassBoost(percent) },
-                    onDynamicBassToggle = { enabled -> service?.setDynamicBassEnabled(enabled) },
-                    onDynamicBassStrengthChanged = { strength -> service?.setDynamicBassStrength(strength) },
                     onLeftChannelVolumeChanged = { volume -> service?.setLeftChannelVolume(volume) },
                     onRightChannelVolumeChanged = { volume -> service?.setRightChannelVolume(volume) },
                     onSelectPresetChip = { presetName -> service?.applyPreset(presetName) },
@@ -261,8 +259,6 @@ fun MainScreen(
     onBandChanged: (Int, Float) -> Unit,
     onPreAmpChanged: (Float) -> Unit,
     onBassBoostChanged: (Float) -> Unit,
-    onDynamicBassToggle: (Boolean) -> Unit,
-    onDynamicBassStrengthChanged: (Float) -> Unit,
     onLeftChannelVolumeChanged: (Float) -> Unit,
     onRightChannelVolumeChanged: (Float) -> Unit,
     onSelectPresetChip: (String) -> Unit,
@@ -273,12 +269,8 @@ fun MainScreen(
     val bandGains by AudioProcessorService.bandGains.collectAsState()
     val preAmpDb by AudioProcessorService.preAmpDb.collectAsState()
     val bassBoostPercent by AudioProcessorService.bassBoostPercent.collectAsState()
-    val dynamicBassEnabled by AudioProcessorService.dynamicBassEnabled.collectAsState()
-    val dynamicBassStrength by AudioProcessorService.dynamicBassStrength.collectAsState()
-    val dynamicBassModeStatus by AudioProcessorService.dynamicBassModeStatus.collectAsState()
     val leftChannelVolume by AudioProcessorService.leftChannelVolume.collectAsState()
     val rightChannelVolume by AudioProcessorService.rightChannelVolume.collectAsState()
-    val currentVolumeRatio by AudioProcessorService.currentVolumeRatio.collectAsState()
     val currentAudioDevice by AudioProcessorService.currentAudioDevice.collectAsState()
     val currentAudioDeviceType by AudioProcessorService.currentAudioDeviceType.collectAsState()
     val currentDevicePresets by AudioProcessorService.currentDevicePresets.collectAsState()
@@ -306,7 +298,6 @@ fun MainScreen(
     }
 
     val haptic = LocalHapticFeedback.current
-    var dynamicBassExpanded by remember { mutableStateOf(true) }
 
     BackHandler(enabled = showSettingsSheet) {
         showSettingsSheet = false
@@ -887,100 +878,6 @@ fun MainScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(14.dp))
-
-            ExpandableExpressiveCard(
-                title = "SMART DYNAMIC BASS",
-                subtitle = androidx.compose.ui.res.stringResource(R.string.dynamic_bass_desc),
-                icon = Icons.Default.Tune,
-                expanded = dynamicBassExpanded,
-                onExpandedChange = { dynamicBassExpanded = it },
-                trailingContent = {
-                    ExpressiveSwitch(
-                        checked = dynamicBassEnabled,
-                        onCheckedChange = onDynamicBassToggle
-                    )
-                }
-            ) {
-                Spacer(modifier = Modifier.height(8.dp))
-
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(MaterialTheme.colorScheme.surfaceContainerHighest)
-                        .padding(horizontal = 12.dp, vertical = 8.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(
-                                modifier = Modifier
-                                    .size(8.dp)
-                                    .background(
-                                        when {
-                                            currentVolumeRatio >= 0.80f -> Color(0xFFFF9800)
-                                            currentVolumeRatio <= 0.45f -> Color(0xFF4CAF50)
-                                            else -> Color(0xFF2196F3)
-                                        },
-                                        CircleShape
-                                    )
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = getLocalizedDynamicBassStatus(
-                                    isEnabled = isEnabled,
-                                    isBypass = isTemporaryBypass,
-                                    isDynamicBassEnabled = dynamicBassEnabled,
-                                    isSpeaker = currentAudioDevice.lowercase().let { it.contains("динамик") || it.contains("speaker") },
-                                    volumeRatio = currentVolumeRatio,
-                                    dynamicBassStrength = dynamicBassStrength,
-                                    fallbackStatus = dynamicBassModeStatus
-                                ),
-                                fontFamily = FontFamily.Default,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = androidx.compose.ui.res.stringResource(R.string.dynamic_bass_intensity),
-                        fontFamily = FontFamily.Default,
-                        fontSize = 11.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Text(
-                        text = "${(dynamicBassStrength * 100).roundToInt()}%",
-                        fontFamily = FontFamily.Default,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(4.dp))
-
-                ExpressiveSlider(
-                    value = dynamicBassStrength,
-                    onValueChange = onDynamicBassStrengthChanged,
-                    valueRange = 0.2f..1.0f,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-
             Spacer(modifier = Modifier.height(24.dp))
         }
     }
@@ -995,42 +892,5 @@ fun getLocalizedAudioDevice(raw: String): String {
         lower.contains("проводные") || lower.contains("wired") || lower.contains("наушники") || lower.contains("headphone") -> androidx.compose.ui.res.stringResource(R.string.device_wired)
         lower.contains("usb") -> androidx.compose.ui.res.stringResource(R.string.device_usb)
         else -> raw.lowercase()
-    }
-}
-
-@Composable
-fun getLocalizedDynamicBassStatus(
-    isEnabled: Boolean,
-    isBypass: Boolean,
-    isDynamicBassEnabled: Boolean,
-    isSpeaker: Boolean,
-    volumeRatio: Float,
-    dynamicBassStrength: Float,
-    fallbackStatus: String
-): String {
-    if (!isEnabled) return androidx.compose.ui.res.stringResource(R.string.dynamic_bass_status_master_off)
-    if (isBypass) return androidx.compose.ui.res.stringResource(R.string.dynamic_bass_status_bypass)
-    if (!isDynamicBassEnabled) return androidx.compose.ui.res.stringResource(R.string.dynamic_bass_status_disabled)
-    if (!isSpeaker) return androidx.compose.ui.res.stringResource(R.string.dynamic_bass_status_headphones)
-
-    val percentVol = (volumeRatio * 100).toInt()
-    return when {
-        volumeRatio <= 0.45f -> {
-            val punch125 = 6.0f * dynamicBassStrength * 1.0f
-            androidx.compose.ui.res.stringResource(R.string.dynamic_bass_status_punch, punch125, percentVol)
-        }
-        volumeRatio < 0.80f -> androidx.compose.ui.res.stringResource(R.string.dynamic_bass_status_adaptive, percentVol)
-        else -> {
-            val cutFactor = when {
-                volumeRatio <= 0.70f -> 0.0f
-                volumeRatio >= 1.0f -> 1.0f
-                else -> {
-                    val t = (volumeRatio - 0.70f) / (1.0f - 0.70f)
-                    t * t * (3.0f - 2.0f * t)
-                }
-            }
-            val cut31 = -6.0f * cutFactor
-            androidx.compose.ui.res.stringResource(R.string.dynamic_bass_status_protection, cut31, percentVol)
-        }
     }
 }

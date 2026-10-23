@@ -30,19 +30,6 @@
     <string name="fader_swipe_hint">swipe up / down</string>
     <string name="fader_tap_to_adjust">tap to adjust</string>
     
-    <!-- Dynamic Bass -->
-    <string name="dynamic_bass_desc">adaptive punch &amp; high-volume cone protection</string>
-    <string name="dynamic_bass_intensity">algorithm intensity</string>
-    <string name="dynamic_bass_off">off</string>
-    <string name="dynamic_bass_atmos_dsp">atmos dsp</string>
-    <string name="dynamic_bass_status_master_off">master off</string>
-    <string name="dynamic_bass_status_bypass">a/b bypass (original audio)</string>
-    <string name="dynamic_bass_status_disabled">disabled</string>
-    <string name="dynamic_bass_status_headphones">headphones (full range)</string>
-    <string name="dynamic_bass_status_punch">bass punch (+%1$.1f db, volume %2$d%%)</string>
-    <string name="dynamic_bass_status_adaptive">adaptive balance (%1$d%%)</string>
-    <string name="dynamic_bass_status_protection">speaker protection (cut %1$.1f db, %2$d%%)</string>
-    
     <!-- Dialogs -->
     <string name="dialog_save_preset_title">SAVE PRESET</string>
     <string name="dialog_preset_name_label">preset name</string>
