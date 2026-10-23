@@ -9,8 +9,8 @@ A rootless Android equalizer for Android 10 and newer.
 
 ## What it does
 
-- Adjusts ten EQ bands: 31 Hz through 16 kHz.
-- Combines pre-amp and channel balance into independent left/right volume sliders (0-200%), alongside Bass Boost.
+- Adjusts ten EQ bands: 31 Hz through 16 kHz, mapped to the bands exposed by the device's Android Equalizer.
+- Provides independent left/right channel gain controls (0-200%), including up to 6 dB of boost per channel.
 - Keeps separate settings for the active audio output, with Bluetooth settings routed by device name and address.
 - Offers three editable preset slots per output; select a slot to switch and changes save automatically.
 - Lets you hold the A/B control to temporarily bypass processing.
@@ -27,7 +27,9 @@ A rootless Android equalizer for Android 10 and newer.
 | Notification permission | Recommended on Android versions that request it, so the foreground-service notification is visible |
 
 [Shizuku](https://shizuku.rikka.app) support is optional and is used for privileged actions such as applying Background Protection.
-Audio-effect availability and behaviour ultimately depend on the device, Android build, and audio session. Test changes at a safe volume.
+Audio-effect availability and behaviour depend on the device, Android build, and audio session. Android documents global-mix session 0 as deprecated, so system-wide coverage cannot be guaranteed on every device. The channel-gain stage uses Android `DynamicsProcessing` input gain only; its EQ, compressor, and limiter stages are disabled. Test changes at a safe volume.
+
+The audio path uses Android's [`Equalizer`](https://developer.android.com/reference/android/media/audiofx/Equalizer) and [`DynamicsProcessing`](https://developer.android.com/reference/android/media/audiofx/DynamicsProcessing) APIs.
 
 ## Setup
 

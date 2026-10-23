@@ -46,7 +46,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.CompareArrows
 import androidx.compose.material.icons.automirrored.filled.VolumeMute
 import androidx.compose.material.icons.filled.Bluetooth
-import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Headphones
 import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.filled.Settings
@@ -61,10 +60,8 @@ import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -82,10 +79,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.lifecycleScope
 import com.omix.alleq.service.AudioProcessorService
+import com.omix.alleq.model.ChannelGain
 import com.omix.alleq.shizuku.ShizukuManager
 import com.omix.alleq.ui.ExpandableExpressiveCard
 import com.omix.alleq.ui.ExpressiveSlider
-import com.omix.alleq.ui.ExpressiveSwitch
 import com.omix.alleq.ui.SettingsSheet
 import com.omix.alleq.ui.TutorialDialog
 import com.omix.alleq.ui.WaveformEqualizerCard
@@ -205,7 +202,6 @@ class MainActivity : ComponentActivity() {
                     onSetTemporaryBypass = { bypass -> service?.setTemporaryBypass(bypass) },
                     onBandChanged = { index, gain -> service?.updateBand(index, gain) },
                     onChannelPreAmpChanged = { leftDb, rightDb -> service?.setChannelPreAmpDb(leftDb, rightDb) },
-                    onBassBoostChanged = { percent -> service?.setBassBoost(percent) },
                     onPresetSlotSelected = { index -> service?.selectPresetSlot(index) },
                     onCopyDiagnostics = {
                         val report = service?.getDiagnosticsReport() ?: """
@@ -255,14 +251,12 @@ fun MainScreen(
     onSetTemporaryBypass: (Boolean) -> Unit,
     onBandChanged: (Int, Float) -> Unit,
     onChannelPreAmpChanged: (Float, Float) -> Unit,
-    onBassBoostChanged: (Float) -> Unit,
     onPresetSlotSelected: (Int) -> Unit,
     onCopyDiagnostics: () -> Unit
 ) {
     val isEnabled by AudioProcessorService.isEnabled.collectAsState()
     val bandGains by AudioProcessorService.bandGains.collectAsState()
     val preAmpDb by AudioProcessorService.preAmpDb.collectAsState()
-    val bassBoostPercent by AudioProcessorService.bassBoostPercent.collectAsState()
     val leftChannelVolume by AudioProcessorService.leftChannelVolume.collectAsState()
     val rightChannelVolume by AudioProcessorService.rightChannelVolume.collectAsState()
     val currentAudioDevice by AudioProcessorService.currentAudioDevice.collectAsState()
@@ -274,16 +268,7 @@ fun MainScreen(
     var showSettingsSheet by remember { mutableStateOf(false) }
     var showTutorial by remember { mutableStateOf(isFirstRunInitial) }
     var whitelistApplied by remember(isBatteryOptimizationIgnored) { mutableStateOf(isBatteryOptimizationIgnored) }
-    var isBassBoostExpanded by remember { mutableStateOf(true) }
     var isPreampBalanceExpanded by remember { mutableStateOf(true) }
-
-    var lastActiveBassBoostPercent by remember { mutableFloatStateOf(if (bassBoostPercent > 0f) bassBoostPercent else 35f) }
-
-    LaunchedEffect(bassBoostPercent) {
-        if (bassBoostPercent > 0f) {
-            lastActiveBassBoostPercent = bassBoostPercent
-        }
-    }
 
     val leftChannelPercent = effectiveChannelVolumePercent(preAmpDb, leftChannelVolume)
     val rightChannelPercent = effectiveChannelVolumePercent(preAmpDb, rightChannelVolume)
@@ -515,42 +500,7 @@ fun MainScreen(
                 Spacer(modifier = Modifier.height(16.dp))
 
                 ExpandableExpressiveCard(
-                    title = "BASS BOOST",
-                    icon = Icons.Default.GraphicEq,
-                    expanded = isBassBoostExpanded,
-                    onExpandedChange = { isBassBoostExpanded = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    subtitle = "${bassBoostPercent.roundToInt()}%",
-                    trailingContent = {
-                        ExpressiveSwitch(
-                            checked = bassBoostPercent > 0f,
-                            onCheckedChange = { enabled ->
-                                if (enabled) {
-                                    val restore = if (lastActiveBassBoostPercent > 0f) lastActiveBassBoostPercent else 35f
-                                    onBassBoostChanged(restore)
-                                } else {
-                                    onBassBoostChanged(0f)
-                                }
-                            }
-                        )
-                    }
-                ) {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    ExpressiveSlider(
-                        value = bassBoostPercent,
-                        onValueChange = { newValue ->
-                            val percent = newValue.roundToInt().toFloat()
-                            onBassBoostChanged(percent)
-                        },
-                        valueRange = 0f..100f,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(14.dp))
-
-                ExpandableExpressiveCard(
-                    title = "PREAMP BALANCE",
+                    title = "BALANCE + BOOST",
                     icon = Icons.Default.Tune,
                     expanded = isPreampBalanceExpanded,
                     onExpandedChange = { isPreampBalanceExpanded = it },
@@ -641,7 +591,9 @@ fun MainScreen(
             ) {
                 Box {
                     SmallFloatingActionButton(
-                        onClick = { showSettingsSheet = true }
+                        onClick = { showSettingsSheet = true },
+                        containerColor = MaterialTheme.colorScheme.secondary,
+                        contentColor = MaterialTheme.colorScheme.onSecondary
                     ) {
                         Icon(
                             imageVector = Icons.Default.Settings,
@@ -663,6 +615,8 @@ fun MainScreen(
 
                 ExtendedFloatingActionButton(
                     onClick = onToggleMaster,
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary,
                     icon = {
                         Icon(
                             imageVector = Icons.Default.PowerSettingsNew,
@@ -695,9 +649,7 @@ fun getLocalizedAudioDevice(raw: String): String {
 }
 
 private fun effectiveChannelVolumePercent(preAmpDb: Float, channelVolume: Float): Float {
-    if (channelVolume <= 0.001f) return 0f
-    val channelDb = preAmpDb + 20f * log10(channelVolume)
-    return (100f * Math.pow(10.0, channelDb.toDouble() / 20.0).toFloat()).coerceIn(0f, 200f)
+    return ChannelGain.toPercent(preAmpDb, channelVolume)
 }
 
 private fun channelVolumeDb(percent: Float): Float {

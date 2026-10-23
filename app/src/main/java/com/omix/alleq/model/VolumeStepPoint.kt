@@ -7,7 +7,6 @@ data class VolumeStepPoint(
     val stepIndex: Int,
     val bandGains: List<Float>,
     val preAmpDb: Float = 0f,
-    val bassBoostPercent: Float = 0f,
     val leftChannelVolume: Float = 1.0f,
     val rightChannelVolume: Float = 1.0f,
     val presetName: String = "Custom"
@@ -16,7 +15,6 @@ data class VolumeStepPoint(
         return JSONObject().apply {
             put("stepIndex", stepIndex)
             put("preAmpDb", preAmpDb.toDouble())
-            put("bassBoostPercent", bassBoostPercent.toDouble())
             put("leftChannelVolume", leftChannelVolume.toDouble())
             put("rightChannelVolume", rightChannelVolume.toDouble())
             put("presetName", presetName)
@@ -31,7 +29,6 @@ data class VolumeStepPoint(
             return try {
                 val stepIndex = obj.getInt("stepIndex")
                 val preAmpDb = obj.optDouble("preAmpDb", 0.0).toFloat()
-                val bassBoostPercent = obj.optDouble("bassBoostPercent", 0.0).toFloat()
                 val leftChannelVolume = obj.optDouble("leftChannelVolume", 1.0).toFloat()
                 val rightChannelVolume = obj.optDouble("rightChannelVolume", 1.0).toFloat()
                 val presetName = obj.optString("presetName", "Custom")
@@ -47,7 +44,6 @@ data class VolumeStepPoint(
                     stepIndex = stepIndex,
                     bandGains = gains,
                     preAmpDb = preAmpDb,
-                    bassBoostPercent = bassBoostPercent,
                     leftChannelVolume = leftChannelVolume,
                     rightChannelVolume = rightChannelVolume,
                     presetName = presetName
@@ -90,7 +86,6 @@ data class VolumeStepPoint(
             }
 
             val interpolatedPreAmp = p1.preAmpDb + (p2.preAmpDb - p1.preAmpDb) * factor
-            val interpolatedBassBoost = p1.bassBoostPercent + (p2.bassBoostPercent - p1.bassBoostPercent) * factor
             val interpolatedLeftVol = p1.leftChannelVolume + (p2.leftChannelVolume - p1.leftChannelVolume) * factor
             val interpolatedRightVol = p1.rightChannelVolume + (p2.rightChannelVolume - p1.rightChannelVolume) * factor
 
@@ -98,7 +93,6 @@ data class VolumeStepPoint(
                 stepIndex = targetStep,
                 bandGains = interpolatedGains,
                 preAmpDb = interpolatedPreAmp,
-                bassBoostPercent = interpolatedBassBoost,
                 leftChannelVolume = interpolatedLeftVol,
                 rightChannelVolume = interpolatedRightVol,
                 presetName = "Interpolated"

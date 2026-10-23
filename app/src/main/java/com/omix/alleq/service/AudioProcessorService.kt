@@ -23,8 +23,9 @@ import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.omix.alleq.MainActivity
 import com.omix.alleq.R
-import com.omix.alleq.audio.DynamicsEngine
+import com.omix.alleq.audio.AudioProcessingEngine
 import com.omix.alleq.logger.AppLogger
+import com.omix.alleq.model.ChannelGain
 import com.omix.alleq.model.EqualizerDefaults
 import com.omix.alleq.model.EqualizerPresetSlot
 import com.omix.alleq.model.VolumeStepPoint
@@ -51,7 +52,7 @@ class AudioProcessorService : Service() {
     }
 
     private lateinit var audioManager: AudioManager
-    private val engines = ConcurrentHashMap<Int, DynamicsEngine>()
+    private val engines = ConcurrentHashMap<Int, AudioProcessingEngine>()
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
     private var playbackCallback: AudioManager.AudioPlaybackCallback? = null
@@ -78,11 +79,6 @@ class AudioProcessorService : Service() {
         private val _preAmpDb = MutableStateFlow(0f)
         val preAmpDb: StateFlow<Float> = _preAmpDb.asStateFlow()
 
-        private val _bassBoostPercent = MutableStateFlow(0f)
-        val bassBoostPercent: StateFlow<Float> = _bassBoostPercent.asStateFlow()
-
-        private val _limiterEnabled = MutableStateFlow(false)
-        val limiterEnabled: StateFlow<Boolean> = _limiterEnabled.asStateFlow()
 
         private val _activePresetName = MutableStateFlow("")
         val activePresetName: StateFlow<String> = _activePresetName.asStateFlow()
@@ -558,7 +554,7 @@ class AudioProcessorService : Service() {
     private fun attachSession(sessionId: Int) {
         if (engines.containsKey(sessionId)) return
         try {
-            val engine = DynamicsEngine(sessionId)
+            val engine = AudioProcessingEngine(sessionId)
             if (sessionId == 0) {
                 engine.onControlStatusChanged = { granted ->
                     AppLogger.log(tag, "Session 0 control status: $granted")
@@ -580,8 +576,6 @@ class AudioProcessorService : Service() {
             val success = engine.initialize(
                 bandGains = _bandGains.value,
                 preAmpDb = _preAmpDb.value,
-                bassBoostPercent = _bassBoostPercent.value,
-                limiterEnabled = _limiterEnabled.value,
                 isEnabled = isSessionActive
             )
             if (success) {
@@ -623,8 +617,6 @@ class AudioProcessorService : Service() {
             val legacyPrefix = "dev_${legacyDeviceKey}_"
             val settingKeys = listOf(
                 "pre_amp_db",
-                "bass_boost_percent",
-                "limiter_enabled",
                 "preset_name",
                 "band_gains",
                 "preset_slots_json",
@@ -662,8 +654,6 @@ class AudioProcessorService : Service() {
 
         if (prefs.contains("${prefix}preset_name")) {
             _preAmpDb.value = prefs.getFloat("${prefix}pre_amp_db", 0f)
-            _bassBoostPercent.value = prefs.getFloat("${prefix}bass_boost_percent", 0f)
-            _limiterEnabled.value = prefs.getBoolean("${prefix}limiter_enabled", false)
             _activePresetName.value = knownPresetSlotName(prefs.getString("${prefix}preset_name", null))
 
             val gainsStr = prefs.getString("${prefix}band_gains", null)
@@ -677,8 +667,6 @@ class AudioProcessorService : Service() {
             }
         } else {
             _preAmpDb.value = prefs.getFloat("pre_amp_db", 0f)
-            _bassBoostPercent.value = prefs.getFloat("bass_boost_percent", 0f)
-            _limiterEnabled.value = prefs.getBoolean("limiter_enabled", false)
             _activePresetName.value = knownPresetSlotName(prefs.getString("preset_name", null))
 
             val gainsStr = prefs.getString("band_gains", null)
@@ -720,15 +708,11 @@ class AudioProcessorService : Service() {
         prefs.edit()
             .putBoolean("is_enabled", _isEnabled.value)
             .putFloat("pre_amp_db", _preAmpDb.value)
-            .putFloat("bass_boost_percent", _bassBoostPercent.value)
-            .putBoolean("limiter_enabled", _limiterEnabled.value)
             .putString("preset_name", _activePresetName.value)
             .putString("band_gains", _bandGains.value.joinToString(","))
             .putFloat("left_channel_volume", _leftChannelVolume.value)
             .putFloat("right_channel_volume", _rightChannelVolume.value)
             .putFloat("${prefix}pre_amp_db", _preAmpDb.value)
-            .putFloat("${prefix}bass_boost_percent", _bassBoostPercent.value)
-            .putBoolean("${prefix}limiter_enabled", _limiterEnabled.value)
             .putString("${prefix}preset_name", _activePresetName.value)
             .putString("${prefix}band_gains", _bandGains.value.joinToString(","))
             .putString("${prefix}preset_slots_json", EqualizerDefaults.presetSlotsToJson(_currentDevicePresetSlots.value))
@@ -740,11 +724,9 @@ class AudioProcessorService : Service() {
     private fun applyCurrentDspSettingsToEngines() {
         val gains = _bandGains.value
         val preAmp = _preAmpDb.value
-        val bassBoost = _bassBoostPercent.value
-        val limiter = _limiterEnabled.value
         engines.values.forEach { engine ->
-            engine.updatePreAmpAndLimiter(preAmp, limiter)
-            engine.updateBands(gains, bassBoost)
+            engine.updatePreAmp(preAmp)
+            engine.updateBands(gains)
             engine.updateChannelVolumes(_leftChannelVolume.value, _rightChannelVolume.value)
         }
         TelemetryManager.currentPreset = currentPresetDisplayName()
@@ -803,7 +785,6 @@ class AudioProcessorService : Service() {
                 stepIndex = curVol,
                 bandGains = _bandGains.value,
                 preAmpDb = _preAmpDb.value,
-                bassBoostPercent = _bassBoostPercent.value,
                 leftChannelVolume = _leftChannelVolume.value,
                 rightChannelVolume = _rightChannelVolume.value,
                 presetName = _activePresetName.value
@@ -813,7 +794,6 @@ class AudioProcessorService : Service() {
 
             _bandGains.value = calculated.bandGains
             _preAmpDb.value = calculated.preAmpDb
-            _bassBoostPercent.value = calculated.bassBoostPercent
             _leftChannelVolume.value = calculated.leftChannelVolume
             _rightChannelVolume.value = calculated.rightChannelVolume
             _activePresetName.value = calculated.presetName
@@ -831,7 +811,6 @@ class AudioProcessorService : Service() {
                 stepIndex = stepIndex,
                 bandGains = _bandGains.value,
                 preAmpDb = _preAmpDb.value,
-                bassBoostPercent = _bassBoostPercent.value,
                 leftChannelVolume = _leftChannelVolume.value,
                 rightChannelVolume = _rightChannelVolume.value,
                 presetName = _activePresetName.value
@@ -877,10 +856,10 @@ class AudioProcessorService : Service() {
         _leftChannelVolume.value = channelVolume(left)
         _rightChannelVolume.value = channelVolume(right)
         engines.values.forEach { engine ->
-            engine.updatePreAmpAndLimiter(sharedPreAmpDb, _limiterEnabled.value)
+            engine.updatePreAmp(sharedPreAmpDb)
             engine.updateChannelVolumes(_leftChannelVolume.value, _rightChannelVolume.value)
         }
-        _lastAdjustedParameterId.value = "pre_amp"
+        _lastAdjustedParameterId.value = "balance"
         syncCurrentStateToVolumePointIfNeeded()
         saveActivePresetSlot()
         saveSettings(debounce = true)
@@ -910,7 +889,7 @@ class AudioProcessorService : Service() {
 
     fun updateBands(gains: List<Float>) {
         _bandGains.value = gains
-        engines.values.forEach { it.updateBands(gains, _bassBoostPercent.value) }
+        engines.values.forEach { it.updateBands(gains) }
         syncCurrentStateToVolumePointIfNeeded()
         saveActivePresetSlot()
         saveSettings(debounce = true)
@@ -927,27 +906,11 @@ class AudioProcessorService : Service() {
 
     fun setPreAmp(db: Float) {
         _preAmpDb.value = db
-        engines.values.forEach { it.updatePreAmpAndLimiter(db, _limiterEnabled.value) }
+        engines.values.forEach { it.updatePreAmp(db) }
         _lastAdjustedParameterId.value = "pre_amp"
         syncCurrentStateToVolumePointIfNeeded()
         saveActivePresetSlot()
         saveSettings(debounce = true)
-    }
-
-    fun setBassBoost(percent: Float) {
-        _bassBoostPercent.value = percent
-        engines.values.forEach { it.updateBands(_bandGains.value, percent) }
-        _lastAdjustedParameterId.value = "bass_boost"
-        syncCurrentStateToVolumePointIfNeeded()
-        saveActivePresetSlot()
-        saveSettings(debounce = true)
-    }
-
-    fun setLimiterEnabled(enabled: Boolean) {
-        _limiterEnabled.value = enabled
-        engines.values.forEach { it.updatePreAmpAndLimiter(_preAmpDb.value, enabled) }
-        saveActivePresetSlot()
-        saveSettings()
     }
 
     fun selectPresetSlot(index: Int) {
@@ -980,8 +943,6 @@ class AudioProcessorService : Service() {
     private fun currentPresetSlotSettings() = EqualizerPresetSlot(
         bandGains = _bandGains.value.toList(),
         preAmpDb = _preAmpDb.value,
-        bassBoostPercent = _bassBoostPercent.value,
-        limiterEnabled = _limiterEnabled.value,
         leftChannelVolume = _leftChannelVolume.value,
         rightChannelVolume = _rightChannelVolume.value
     )
@@ -1002,13 +963,11 @@ class AudioProcessorService : Service() {
     private fun applyPresetSlotSettings(slot: EqualizerPresetSlot) {
         _bandGains.value = slot.bandGains
         _preAmpDb.value = slot.preAmpDb
-        _bassBoostPercent.value = slot.bassBoostPercent
-        _limiterEnabled.value = slot.limiterEnabled
         _leftChannelVolume.value = slot.leftChannelVolume
         _rightChannelVolume.value = slot.rightChannelVolume
         engines.values.forEach { engine ->
-            engine.updatePreAmpAndLimiter(slot.preAmpDb, slot.limiterEnabled)
-            engine.updateBands(slot.bandGains, slot.bassBoostPercent)
+            engine.updatePreAmp(slot.preAmpDb)
+            engine.updateBands(slot.bandGains)
             engine.updateChannelVolumes(slot.leftChannelVolume, slot.rightChannelVolume)
         }
     }
@@ -1033,12 +992,12 @@ class AudioProcessorService : Service() {
             appendLine("Registered Session IDs: ${engines.keys.toList()}")
             appendLine(hwStatus)
             appendLine()
-            appendLine("[DSP CONFIGURATION]")
+            appendLine("[EQ AND CHANNEL GAIN]")
             appendLine("Master Switch: ${if (_isEnabled.value) "ENABLED" else "DISABLED"}")
             appendLine("Active Preset: ${_activePresetName.value}")
             appendLine("Pre-Amp Gain: ${_preAmpDb.value} dB")
-            appendLine("Bass Boost: ${_bassBoostPercent.value}%")
-            appendLine("Limiter Status: ${if (_limiterEnabled.value) "ENABLED (0 dBFS)" else "BYPASSED"}")
+            appendLine("Left Channel: ${channelVolumeDescription(_leftChannelVolume.value)}")
+            appendLine("Right Channel: ${channelVolumeDescription(_rightChannelVolume.value)}")
             appendLine("Band Gains (31Hz..16kHz): ${_bandGains.value.map { it.toInt() }}")
             appendLine()
             appendLine("[RECENT EVENT JOURNAL (LAST 40)]")
@@ -1049,6 +1008,12 @@ class AudioProcessorService : Service() {
             }
             appendLine("=== END OF REPORT ===")
         }
+    }
+
+    private fun channelVolumeDescription(volume: Float): String {
+        if (volume <= 0.001f) return "muted"
+        val gainDb = ChannelGain.toDecibels(_preAmpDb.value, volume)
+        return "${ChannelGain.toPercent(_preAmpDb.value, volume).toInt()}% ($gainDb dB)"
     }
 
     override fun onTaskRemoved(rootIntent: Intent?) {

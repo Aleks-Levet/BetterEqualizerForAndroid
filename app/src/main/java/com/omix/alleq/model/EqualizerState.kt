@@ -11,16 +11,12 @@ data class EqualizerPreset(
     val description: String,
     val bandGains: List<Float>, // 10 bands from -15 to +15 dB
     val preAmpDb: Float = 0f,
-    val bassBoostPercent: Float = 0f,
-    val limiterEnabled: Boolean = false,
     val isCustom: Boolean = false
 )
 
 data class EqualizerPresetSlot(
     val bandGains: List<Float>,
     val preAmpDb: Float,
-    val bassBoostPercent: Float,
-    val limiterEnabled: Boolean,
     val leftChannelVolume: Float,
     val rightChannelVolume: Float
 )
@@ -41,6 +37,31 @@ object EqualizerDefaults {
 
     const val PRESET_SLOT_COUNT = 3
 
+    fun gainAtFrequency(bandGains: List<Float>, frequencyHz: Float): Float {
+        if (frequencyHz.isNaN()) return 0f
+        val firstFrequency = BANDS.first().frequencyHz.toFloat()
+        val lastFrequency = BANDS.last().frequencyHz.toFloat()
+
+        fun gainAt(index: Int): Float =
+            bandGains.getOrElse(index) { 0f }.takeIf { it.isFinite() }?.coerceIn(-15f, 15f) ?: 0f
+
+        if (frequencyHz <= firstFrequency) {
+            return gainAt(0)
+        }
+        if (frequencyHz >= lastFrequency) {
+            return gainAt(BANDS.lastIndex)
+        }
+
+        val upperIndex = BANDS.indexOfFirst { it.frequencyHz >= frequencyHz }
+        val lower = BANDS[upperIndex - 1]
+        val upper = BANDS[upperIndex]
+        val lowerGain = gainAt(lower.index)
+        val upperGain = gainAt(upper.index)
+        val factor = (kotlin.math.ln(frequencyHz) - kotlin.math.ln(lower.frequencyHz.toFloat())) /
+            (kotlin.math.ln(upper.frequencyHz.toFloat()) - kotlin.math.ln(lower.frequencyHz.toFloat()))
+        return (lowerGain + (upperGain - lowerGain) * factor).coerceIn(-15f, 15f)
+    }
+
     fun presetSlotsToJson(slots: List<EqualizerPresetSlot?>): String {
         require(slots.size == PRESET_SLOT_COUNT)
         return org.json.JSONArray().apply {
@@ -53,8 +74,6 @@ object EqualizerDefaults {
                             slot.bandGains.forEach { put(it.toDouble()) }
                         })
                         put("preAmpDb", slot.preAmpDb.toDouble())
-                        put("bassBoostPercent", slot.bassBoostPercent.toDouble())
-                        put("limiterEnabled", slot.limiterEnabled)
                         put("leftChannelVolume", slot.leftChannelVolume.toDouble())
                         put("rightChannelVolume", slot.rightChannelVolume.toDouble())
                     })
@@ -78,8 +97,6 @@ object EqualizerDefaults {
                     EqualizerPresetSlot(
                         bandGains = List(gainsArray.length()) { gainsArray.getDouble(it).toFloat() },
                         preAmpDb = obj.getDouble("preAmpDb").toFloat(),
-                        bassBoostPercent = obj.getDouble("bassBoostPercent").toFloat(),
-                        limiterEnabled = obj.getBoolean("limiterEnabled"),
                         leftChannelVolume = obj.getDouble("leftChannelVolume").toFloat(),
                         rightChannelVolume = obj.getDouble("rightChannelVolume").toFloat()
                     )
@@ -97,8 +114,6 @@ object EqualizerDefaults {
                 put("name", preset.name)
                 put("description", preset.description)
                 put("preAmpDb", preset.preAmpDb.toDouble())
-                put("bassBoostPercent", preset.bassBoostPercent.toDouble())
-                put("limiterEnabled", preset.limiterEnabled)
                 val gainsArray = org.json.JSONArray()
                 preset.bandGains.forEach { gainsArray.put(it.toDouble()) }
                 put("bandGains", gainsArray)
@@ -126,8 +141,6 @@ object EqualizerDefaults {
                         description = obj.optString("description", "Custom preset"),
                         bandGains = gains,
                         preAmpDb = obj.optDouble("preAmpDb", 0.0).toFloat(),
-                        bassBoostPercent = obj.optDouble("bassBoostPercent", 0.0).toFloat(),
-                        limiterEnabled = obj.optBoolean("limiterEnabled", false),
                         isCustom = true
                     )
                 )
@@ -143,8 +156,6 @@ object EqualizerDefaults {
                 put("name", preset.name)
                 put("description", preset.description)
                 put("preAmpDb", preset.preAmpDb.toDouble())
-                put("bassBoostPercent", preset.bassBoostPercent.toDouble())
-                put("limiterEnabled", preset.limiterEnabled)
                 put("isCustom", preset.isCustom)
                 val gainsArray = org.json.JSONArray()
                 preset.bandGains.forEach { gainsArray.put(it.toDouble()) }
@@ -173,8 +184,6 @@ object EqualizerDefaults {
                         description = obj.optString("description", "Preset"),
                         bandGains = gains,
                         preAmpDb = obj.optDouble("preAmpDb", 0.0).toFloat(),
-                        bassBoostPercent = obj.optDouble("bassBoostPercent", 0.0).toFloat(),
-                        limiterEnabled = obj.optBoolean("limiterEnabled", false),
                         isCustom = obj.optBoolean("isCustom", false)
                     )
                 )
@@ -214,8 +223,6 @@ object EqualizerDefaults {
             put("name", preset.name)
             put("description", preset.description)
             put("preAmpDb", preset.preAmpDb.toDouble())
-            put("bassBoostPercent", preset.bassBoostPercent.toDouble())
-            put("limiterEnabled", preset.limiterEnabled)
             put("isCustom", true)
             val gainsArray = org.json.JSONArray()
             preset.bandGains.forEach { gainsArray.put(it.toDouble()) }
@@ -266,8 +273,6 @@ object EqualizerDefaults {
                 description = desc,
                 bandGains = gains,
                 preAmpDb = obj.optDouble("preAmpDb", 0.0).toFloat(),
-                bassBoostPercent = obj.optDouble("bassBoostPercent", 0.0).toFloat(),
-                limiterEnabled = obj.optBoolean("limiterEnabled", false),
                 isCustom = true
             )
         } catch (_: Exception) {

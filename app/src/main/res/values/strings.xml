@@ -144,7 +144,6 @@
     <string name="btn_import_preset_file">import from file (.alleq)</string>
     <string name="dialog_import_preset_title">IMPORT PRESET</string>
     <string name="dialog_import_pack_title">IMPORT PRESET PACK</string>
-    <string name="dialog_import_preset_desc">Preset: %1$s\nPre-amp: %2$s dB, Bass Boost: %3$d%%</string>
     <string name="dialog_import_pack_desc">Found %1$d presets in file:\n%2$s</string>
     <string name="dialog_btn_import_and_apply">import &amp; apply</string>
     <string name="dialog_btn_import_save_only">save only</string>

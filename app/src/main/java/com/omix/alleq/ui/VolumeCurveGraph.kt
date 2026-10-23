@@ -62,7 +62,6 @@ fun VolumeCurveGraph(
             Color(0xFF9C27B0), // 8kHz
             Color(0xFFE91E63), // 16kHz
             Color(0xFFFFD54F), // Pre-Amp
-            Color(0xFFFF7043), // Bass Boost
             Color(0xFFAB47BC)  // Balance
         )
     }
@@ -162,12 +161,11 @@ fun VolumeCurveGraph(
                     return (paddingY + graphH) - (norm * graphH)
                 }
 
-                // Plot lines for all 13 parameters
-                for (pIdx in 0..12) {
+                // Plot lines for all 12 parameters
+                for (pIdx in 0..11) {
                     val paramId = when (pIdx) {
                         in 0..9 -> "band_$pIdx"
                         10 -> "pre_amp"
-                        11 -> "bass_boost"
                         else -> "balance"
                     }
 
@@ -181,7 +179,6 @@ fun VolumeCurveGraph(
                         val value = when (pIdx) {
                             in 0..9 -> pt.bandGains.getOrElse(pIdx) { 0f }
                             10 -> pt.preAmpDb
-                            11 -> (pt.bassBoostPercent / 100f) * 15f - 7.5f
                             else -> ((pt.leftChannelVolume - pt.rightChannelVolume) * 10f)
                         }
 
@@ -195,7 +192,6 @@ fun VolumeCurveGraph(
                             val prevVal = when (pIdx) {
                                 in 0..9 -> stepPoints[idx - 1].bandGains.getOrElse(pIdx) { 0f }
                                 10 -> stepPoints[idx - 1].preAmpDb
-                                11 -> (stepPoints[idx - 1].bassBoostPercent / 100f) * 15f - 7.5f
                                 else -> ((stepPoints[idx - 1].leftChannelVolume - stepPoints[idx - 1].rightChannelVolume) * 10f)
                             }
                             val prevY = yForValue(prevVal, -15f, 15f)
@@ -274,7 +270,6 @@ private fun getParameterLabel(paramId: String): String {
             labels.getOrElse(idx) { "Band $idx" }
         }
         paramId == "pre_amp" -> "Pre-Amp Gain"
-        paramId == "bass_boost" -> "Bass Boost"
         paramId == "balance" -> "L/R Balance"
         else -> "EQ Band"
     }
@@ -287,8 +282,7 @@ private fun getParameterColor(paramId: String, colors: List<Color>, fallback: Co
             colors.getOrElse(idx) { fallback }
         }
         paramId == "pre_amp" -> colors.getOrElse(10) { fallback }
-        paramId == "bass_boost" -> colors.getOrElse(11) { fallback }
-        paramId == "balance" -> colors.getOrElse(12) { fallback }
+        paramId == "balance" -> colors.getOrElse(11) { fallback }
         else -> fallback
     }
 }
