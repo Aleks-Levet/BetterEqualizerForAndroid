@@ -254,7 +254,7 @@ class DynamicsEngine(val audioSessionId: Int) {
 
         val maxBoostDb = maxOf(maxBandBoost, bassBoostCompensation)
 
-        val totalGainDb = (speechLevellerFloor + maxBoostDb + cachedPreAmpDb).coerceIn(0f, 12f)
+        val totalGainDb = (speechLevellerFloor + maxBoostDb).coerceIn(0f, 12f)
         val targetMilliBels = (totalGainDb * 100).toInt().coerceIn(0, 1200)
 
         loudnessEnhancer?.let { le ->
@@ -273,6 +273,7 @@ class DynamicsEngine(val audioSessionId: Int) {
         if (!isInitialized) return
 
         updateGainCompensation()
+        updateChannelVolumes(cachedLeftChannelVol, cachedRightChannelVol)
 
         if (!isEnabled) return
 
@@ -307,8 +308,12 @@ class DynamicsEngine(val audioSessionId: Int) {
 
         dpe?.let { dp ->
             try {
-                val leftGainDb = if (leftVol <= 0.001f) -36f else (20f * kotlin.math.log10(leftVol.toDouble())).toFloat().coerceIn(-36f, 0f)
-                val rightGainDb = if (rightVol <= 0.001f) -36f else (20f * kotlin.math.log10(rightVol.toDouble())).toFloat().coerceIn(-36f, 0f)
+                val leftGainDb = if (leftVol <= 0.001f) -96f else {
+                    (cachedPreAmpDb + 20f * kotlin.math.log10(leftVol.toDouble()).toFloat()).coerceIn(-60f, 12f)
+                }
+                val rightGainDb = if (rightVol <= 0.001f) -96f else {
+                    (cachedPreAmpDb + 20f * kotlin.math.log10(rightVol.toDouble()).toFloat()).coerceIn(-60f, 12f)
+                }
 
                 dp.setInputGainbyChannel(0, leftGainDb)
                 dp.setInputGainbyChannel(1, rightGainDb)

@@ -22,6 +22,6 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "allEQ"
+rootProject.name = "BetterAndroidSpeakerEnhancer"
 include(":app")
 

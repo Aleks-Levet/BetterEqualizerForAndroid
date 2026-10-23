@@ -1,8 +1,9 @@
 ﻿package com.omix.alleq
 
 import com.omix.alleq.model.EqualizerDefaults
+import com.omix.alleq.model.EqualizerPresetSlot
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
+import org.junit.Assert.assertNull
 import org.junit.Test
 
 class EqualizerDefaultsTest {
@@ -19,24 +20,29 @@ class EqualizerDefaultsTest {
     }
 
     @Test
-    fun presetsHaveTenBands() {
-        EqualizerDefaults.PRESETS.forEach { preset ->
-            assertEquals("Preset ${preset.name} must have 10 bands", 10, preset.bandGains.size)
-        }
+    fun emptyPresetSlotsRoundTrip() {
+        val slots = List(EqualizerDefaults.PRESET_SLOT_COUNT) { null }
+        assertEquals(slots, EqualizerDefaults.presetSlotsFromJson(EqualizerDefaults.presetSlotsToJson(slots)))
     }
 
     @Test
-    fun presetsGainsWithinRange() {
-        EqualizerDefaults.PRESETS.forEach { preset ->
-            preset.bandGains.forEach { gain ->
-                assertTrue("Gain $gain in ${preset.name} out of range", gain in -15f..15f)
-            }
-        }
+    fun savedPresetSlotsRoundTrip() {
+        val slot = EqualizerPresetSlot(
+            bandGains = List(EqualizerDefaults.BANDS.size) { it.toFloat() - 5f },
+            preAmpDb = -2f,
+            bassBoostPercent = 30f,
+            limiterEnabled = true,
+            leftChannelVolume = 0.8f,
+            rightChannelVolume = 0.9f
+        )
+        val slots = listOf(slot, null, slot.copy(bassBoostPercent = 0f))
+        val restored = EqualizerDefaults.presetSlotsFromJson(EqualizerDefaults.presetSlotsToJson(slots))
+        assertEquals(slots, restored)
     }
 
     @Test
-    fun presetNamesAreUnique() {
-        val names = EqualizerDefaults.PRESETS.map { it.name }
-        assertEquals(names.size, names.distinct().size)
+    fun malformedPresetSlotsAreRejected() {
+        assertNull(EqualizerDefaults.presetSlotsFromJson("not json"))
+        assertNull(EqualizerDefaults.presetSlotsFromJson("""[null, {"bandGains": []}, null]"""))
     }
 }

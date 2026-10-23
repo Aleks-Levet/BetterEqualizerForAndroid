@@ -128,6 +128,7 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalView
+import com.omix.alleq.model.EqualizerPresetSlot
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -834,11 +835,10 @@ fun ExpressiveSlider(
 }
 
 @Composable
-fun ExpressiveSegmentedButton(
-    presetChips: List<String>,
+fun PresetSlots(
+    slots: List<EqualizerPresetSlot?>,
     activePreset: String,
-    onPresetSelected: (String) -> Unit,
-    onCustomizeClick: () -> Unit,
+    onSlotSelected: (Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val view = LocalView.current
@@ -850,56 +850,31 @@ fun ExpressiveSegmentedButton(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(bottom = 6.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Tune,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(16.dp)
-                )
-                Text(
-                    text = "DEVICE PRESETS",
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary,
-                    letterSpacing = 0.5.sp
-                )
-            }
-
-            Box(
+            Icon(
+                imageVector = Icons.Default.Tune,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
                 modifier = Modifier
-                    .clip(CircleShape)
-                    .clickable {
-                        view.performHapticFeedback(HapticFeedbackConstants.SEGMENT_TICK)
-                        onCustomizeClick()
-                    }
-                    .padding(horizontal = 8.dp, vertical = 4.dp)
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    Text(
-                        text = "Customize",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    Icon(
-                        imageVector = Icons.Default.ChevronRight,
-                        contentDescription = "Customize Presets",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(14.dp)
-                    )
-                }
-            }
+                    .padding(end = 6.dp)
+                    .size(16.dp)
+            )
+            Text(
+                text = "PRESETS",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary,
+                letterSpacing = 0.5.sp
+            )
         }
+
+        Text(
+            text = "Tap a slot to switch; changes save automatically",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(bottom = 6.dp)
+        )
 
         Surface(
             modifier = Modifier
@@ -915,11 +890,17 @@ fun ExpressiveSegmentedButton(
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                presetChips.take(3).forEach { presetName ->
+                repeat(3) { index ->
+                    val presetName = "Preset ${index + 1}"
                     val isSelected = activePreset.equals(presetName, ignoreCase = true)
+                    val isSaved = slots.getOrNull(index) != null
 
                     val bgColor by animateColorAsState(
-                        targetValue = if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent,
+                        targetValue = when {
+                            isSelected -> MaterialTheme.colorScheme.primary
+                            isSaved -> MaterialTheme.colorScheme.surfaceContainerLow
+                            else -> Color.Transparent
+                        },
                         animationSpec = spring(
                             dampingRatio = Spring.DampingRatioMediumBouncy,
                             stiffness = Spring.StiffnessLow
@@ -939,10 +920,8 @@ fun ExpressiveSegmentedButton(
                             .clip(RoundedCornerShape(12.dp))
                             .background(bgColor)
                             .clickable {
-                                if (!isSelected) {
-                                    view.performHapticFeedback(HapticFeedbackConstants.SEGMENT_FREQUENT_TICK)
-                                    onPresetSelected(presetName)
-                                }
+                                view.performHapticFeedback(HapticFeedbackConstants.SEGMENT_FREQUENT_TICK)
+                                onSlotSelected(index)
                             },
                         contentAlignment = Alignment.Center
                     ) {
@@ -954,158 +933,6 @@ fun ExpressiveSegmentedButton(
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun PresetCustomizerDialog(
-    currentChips: List<String>,
-    allPresets: List<com.omix.alleq.model.EqualizerPreset>,
-    onDismiss: () -> Unit,
-    onSaveChips: (List<String>) -> Unit
-) {
-    var selectedChips by remember { mutableStateOf(currentChips.take(3)) }
-    val view = LocalView.current
-
-    androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
-        Surface(
-            shape = RoundedCornerShape(28.dp),
-            color = MaterialTheme.colorScheme.surfaceContainerLow,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp)
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(20.dp)
-            ) {
-                Text(
-                    text = "CUSTOMIZE QUICK PRESETS",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary,
-                    letterSpacing = 0.5.sp
-                )
-
-                Spacer(modifier = Modifier.height(4.dp))
-
-                Text(
-                    text = "Select 3 presets for quick access on this output device:",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(max = 280.dp)
-                        .verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    allPresets.forEach { preset ->
-                        val isSelected = selectedChips.contains(preset.name)
-
-                        Surface(
-                            shape = RoundedCornerShape(12.dp),
-                            color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHighest,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    view.performHapticFeedback(HapticFeedbackConstants.SEGMENT_TICK)
-                                    if (isSelected) {
-                                        if (selectedChips.size > 1) {
-                                            selectedChips = selectedChips - preset.name
-                                        }
-                                    } else {
-                                        if (selectedChips.size < 3) {
-                                            selectedChips = selectedChips + preset.name
-                                        } else {
-                                            selectedChips = selectedChips.drop(1) + preset.name
-                                        }
-                                    }
-                                }
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 14.dp, vertical = 10.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = preset.name,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        fontWeight = FontWeight.Bold,
-                                        color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
-                                    )
-                                    if (preset.description.isNotBlank()) {
-                                        Text(
-                                            text = preset.description,
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f) else MaterialTheme.colorScheme.onSurfaceVariant,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis
-                                        )
-                                    }
-                                }
-
-                                if (isSelected) {
-                                    Surface(
-                                        shape = CircleShape,
-                                        color = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(24.dp)
-                                    ) {
-                                        Box(contentAlignment = Alignment.Center) {
-                                            Icon(
-                                                imageVector = Icons.Default.Check,
-                                                contentDescription = null,
-                                                tint = MaterialTheme.colorScheme.onPrimary,
-                                                modifier = Modifier.size(14.dp)
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(20.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Button(
-                        onClick = onDismiss,
-                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHighest, contentColor = MaterialTheme.colorScheme.onSurfaceVariant),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Text("Cancel")
-                    }
-
-                    Spacer(modifier = Modifier.width(8.dp))
-
-                    Button(
-                        onClick = {
-                            if (selectedChips.size == 3) {
-                                onSaveChips(selectedChips)
-                                onDismiss()
-                            }
-                        },
-                        enabled = selectedChips.size == 3,
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Text("Done")
                     }
                 }
             }

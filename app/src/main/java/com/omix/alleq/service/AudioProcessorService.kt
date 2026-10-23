@@ -26,7 +26,7 @@ import com.omix.alleq.R
 import com.omix.alleq.audio.DynamicsEngine
 import com.omix.alleq.logger.AppLogger
 import com.omix.alleq.model.EqualizerDefaults
-import com.omix.alleq.model.EqualizerPreset
+import com.omix.alleq.model.EqualizerPresetSlot
 import com.omix.alleq.model.VolumeStepPoint
 import com.omix.alleq.telemetry.TelemetryManager
 import kotlinx.coroutines.CoroutineScope
@@ -72,7 +72,7 @@ class AudioProcessorService : Service() {
         private val _isEnabled = MutableStateFlow(true)
         val isEnabled: StateFlow<Boolean> = _isEnabled.asStateFlow()
 
-        private val _bandGains = MutableStateFlow(EqualizerDefaults.PRESETS[0].bandGains)
+        private val _bandGains = MutableStateFlow(List(EqualizerDefaults.BANDS.size) { 0f })
         val bandGains: StateFlow<List<Float>> = _bandGains.asStateFlow()
 
         private val _preAmpDb = MutableStateFlow(0f)
@@ -84,20 +84,11 @@ class AudioProcessorService : Service() {
         private val _limiterEnabled = MutableStateFlow(false)
         val limiterEnabled: StateFlow<Boolean> = _limiterEnabled.asStateFlow()
 
-        private val _activePresetName = MutableStateFlow("Flat")
+        private val _activePresetName = MutableStateFlow("")
         val activePresetName: StateFlow<String> = _activePresetName.asStateFlow()
 
         private val _activeSessionsCount = MutableStateFlow(0)
         val activeSessionsCount: StateFlow<Int> = _activeSessionsCount.asStateFlow()
-
-        private val _allPresets = MutableStateFlow<List<EqualizerPreset>>(EqualizerDefaults.PRESETS)
-        val allPresets: StateFlow<List<EqualizerPreset>> = _allPresets.asStateFlow()
-
-        private val _deletedPresets = MutableStateFlow<List<EqualizerPreset>>(emptyList())
-        val deletedPresets: StateFlow<List<EqualizerPreset>> = _deletedPresets.asStateFlow()
-
-        private val _customPresets = MutableStateFlow<List<EqualizerPreset>>(emptyList())
-        val customPresets: StateFlow<List<EqualizerPreset>> = _customPresets.asStateFlow()
 
         private val _currentAudioDevice = MutableStateFlow("Speaker")
         val currentAudioDevice: StateFlow<String> = _currentAudioDevice.asStateFlow()
@@ -108,8 +99,8 @@ class AudioProcessorService : Service() {
         private val _currentAudioDeviceType = MutableStateFlow("SPEAKER")
         val currentAudioDeviceType: StateFlow<String> = _currentAudioDeviceType.asStateFlow()
 
-        private val _currentDevicePresets = MutableStateFlow<List<String>>(listOf("Flat", "Bass Punch", "Vocal Clarity"))
-        val currentDevicePresets: StateFlow<List<String>> = _currentDevicePresets.asStateFlow()
+        private val _currentDevicePresetSlots = MutableStateFlow<List<EqualizerPresetSlot?>>(List(EqualizerDefaults.PRESET_SLOT_COUNT) { null })
+        val currentDevicePresetSlots: StateFlow<List<EqualizerPresetSlot?>> = _currentDevicePresetSlots.asStateFlow()
 
         private val _isTemporaryBypass = MutableStateFlow(false)
         val isTemporaryBypass: StateFlow<Boolean> = _isTemporaryBypass.asStateFlow()
@@ -207,7 +198,7 @@ class AudioProcessorService : Service() {
         val toggleActionText = if (_isEnabled.value) getString(R.string.notif_action_disable) else getString(R.string.notif_action_enable)
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("allEQ • $stateText")
+            .setContentTitle("Better Android Speaker Enhancer • $stateText")
             .setContentText(getString(R.string.notif_active_sessions, _activeSessionsCount.value, _currentAudioDevice.value))
             .setSmallIcon(android.R.drawable.ic_media_play)
             .setContentIntent(openPendingIntent)
@@ -607,24 +598,6 @@ class AudioProcessorService : Service() {
 
         TelemetryManager.isDspEnabled = _isEnabled.value
 
-        val savedAllJson = prefs.getString("all_presets_json", null)
-        if (!savedAllJson.isNullOrBlank()) {
-            val loaded = EqualizerDefaults.allPresetsFromJson(savedAllJson)
-            if (loaded.isNotEmpty()) {
-                _allPresets.value = loaded
-            } else {
-                _allPresets.value = EqualizerDefaults.PRESETS
-            }
-        } else {
-            val customJson = prefs.getString("custom_presets_json", null)
-            val legacy = EqualizerDefaults.customPresetsFromJson(customJson)
-            _allPresets.value = EqualizerDefaults.PRESETS + legacy
-        }
-
-        val deletedJson = prefs.getString("deleted_presets_json", null)
-        _deletedPresets.value = EqualizerDefaults.allPresetsFromJson(deletedJson)
-        _customPresets.value = _allPresets.value.filter { it.isCustom }
-
         loadDeviceSettings(_currentAudioDeviceKey.value)
     }
 
@@ -632,17 +605,21 @@ class AudioProcessorService : Service() {
         val prefs = getSharedPreferences("alleq_audio_state", Context.MODE_PRIVATE)
         val prefix = "dev_${deviceKey}_"
 
-        val defaultChipPresets = when {
-            deviceKey.startsWith("bt_") -> listOf("Club", "Rock", "Cinematic")
-            deviceKey == "wired" -> listOf("Acoustic", "Vocal Clarity", "Rock")
-            else -> listOf("Flat", "Bass Punch", "Vocal Clarity")
+        val savedSlotsJson = prefs.getString("${prefix}preset_slots_json", null)
+        _currentDevicePresetSlots.value = if (savedSlotsJson == null) {
+            List(EqualizerDefaults.PRESET_SLOT_COUNT) { null }
+        } else {
+            EqualizerDefaults.presetSlotsFromJson(savedSlotsJson) ?: run {
+                AppLogger.log(tag, "Could not load saved preset slots for output $deviceKey")
+                List(EqualizerDefaults.PRESET_SLOT_COUNT) { null }
+            }
         }
 
         if (prefs.contains("${prefix}preset_name")) {
             _preAmpDb.value = prefs.getFloat("${prefix}pre_amp_db", 0f)
             _bassBoostPercent.value = prefs.getFloat("${prefix}bass_boost_percent", 0f)
             _limiterEnabled.value = prefs.getBoolean("${prefix}limiter_enabled", false)
-            _activePresetName.value = prefs.getString("${prefix}preset_name", "Flat") ?: "Flat"
+            _activePresetName.value = prefs.getString("${prefix}preset_name", "") ?: ""
 
             val gainsStr = prefs.getString("${prefix}band_gains", null)
             if (gainsStr != null) {
@@ -653,23 +630,11 @@ class AudioProcessorService : Service() {
                     }
                 } catch (_: Exception) {}
             }
-
-            val chipsStr = prefs.getString("${prefix}chip_presets", null)
-            if (!chipsStr.isNullOrBlank()) {
-                val parsed = chipsStr.split(",").map { it.trim() }.filter { it.isNotEmpty() }
-                if (parsed.size == 3) {
-                    _currentDevicePresets.value = parsed
-                } else {
-                    _currentDevicePresets.value = defaultChipPresets
-                }
-            } else {
-                _currentDevicePresets.value = defaultChipPresets
-            }
         } else {
             _preAmpDb.value = prefs.getFloat("pre_amp_db", 0f)
             _bassBoostPercent.value = prefs.getFloat("bass_boost_percent", 0f)
             _limiterEnabled.value = prefs.getBoolean("limiter_enabled", false)
-            _activePresetName.value = prefs.getString("preset_name", "Flat") ?: "Flat"
+            _activePresetName.value = prefs.getString("preset_name", "") ?: ""
 
             val gainsStr = prefs.getString("band_gains", null)
             if (gainsStr != null) {
@@ -680,7 +645,6 @@ class AudioProcessorService : Service() {
                     }
                 } catch (_: Exception) {}
             }
-            _currentDevicePresets.value = defaultChipPresets
             writeSettingsToDisk(deviceKey)
         }
 
@@ -722,7 +686,7 @@ class AudioProcessorService : Service() {
             .putBoolean("${prefix}limiter_enabled", _limiterEnabled.value)
             .putString("${prefix}preset_name", _activePresetName.value)
             .putString("${prefix}band_gains", _bandGains.value.joinToString(","))
-            .putString("${prefix}chip_presets", _currentDevicePresets.value.joinToString(","))
+            .putString("${prefix}preset_slots_json", EqualizerDefaults.presetSlotsToJson(_currentDevicePresetSlots.value))
             .putBoolean("${prefix}volume_aware_enabled", _isVolumeAwareEnabled.value)
             .putString("${prefix}volume_curve_json", VolumeStepPoint.jsonListToString(_volumeCurvePoints.value))
             .apply()
@@ -832,19 +796,13 @@ class AudioProcessorService : Service() {
         }
     }
 
-    fun setDevicePresetChips(chipPresets: List<String>) {
-        if (chipPresets.size == 3) {
-            _currentDevicePresets.value = chipPresets
-            writeSettingsToDisk()
-        }
-    }
-
     fun setLeftChannelVolume(volume: Float) {
         val clamped = volume.coerceIn(0f, 1f)
         _leftChannelVolume.value = clamped
         engines.values.forEach { it.updateChannelVolumes(clamped, _rightChannelVolume.value) }
         _lastAdjustedParameterId.value = "balance"
         syncCurrentStateToVolumePointIfNeeded()
+        saveActivePresetSlot()
         saveSettings(debounce = true)
     }
 
@@ -854,16 +812,33 @@ class AudioProcessorService : Service() {
         engines.values.forEach { it.updateChannelVolumes(_leftChannelVolume.value, clamped) }
         _lastAdjustedParameterId.value = "balance"
         syncCurrentStateToVolumePointIfNeeded()
+        saveActivePresetSlot()
         saveSettings(debounce = true)
     }
 
-    private fun savePresetLists() {
-        val prefs = getSharedPreferences("alleq_audio_state", Context.MODE_PRIVATE)
-        prefs.edit()
-            .putString("custom_presets_json", EqualizerDefaults.customPresetsToJson(_customPresets.value))
-            .putString("all_presets_json", EqualizerDefaults.allPresetsToJson(_allPresets.value))
-            .putString("deleted_presets_json", EqualizerDefaults.allPresetsToJson(_deletedPresets.value))
-            .apply()
+    fun setChannelPreAmpDb(leftDb: Float, rightDb: Float) {
+        val left = leftDb.coerceIn(-48f, 12f)
+        val right = rightDb.coerceIn(-48f, 12f)
+        val sharedPreAmpDb = maxOf(left, right).coerceIn(-48f, 6.02f)
+
+        fun channelVolume(channelDb: Float): Float {
+            if (channelDb <= -48f) return 0f
+            val channelOffsetDb = (channelDb - sharedPreAmpDb).coerceIn(-60f, 0f)
+            if (channelOffsetDb <= -60f) return 0f
+            return Math.pow(10.0, channelOffsetDb.toDouble() / 20.0).toFloat()
+        }
+
+        _preAmpDb.value = sharedPreAmpDb
+        _leftChannelVolume.value = channelVolume(left)
+        _rightChannelVolume.value = channelVolume(right)
+        engines.values.forEach { engine ->
+            engine.updatePreAmpAndLimiter(sharedPreAmpDb, _limiterEnabled.value)
+            engine.updateChannelVolumes(_leftChannelVolume.value, _rightChannelVolume.value)
+        }
+        _lastAdjustedParameterId.value = "pre_amp"
+        syncCurrentStateToVolumePointIfNeeded()
+        saveActivePresetSlot()
+        saveSettings(debounce = true)
     }
 
     fun toggleEnabled() {
@@ -892,6 +867,7 @@ class AudioProcessorService : Service() {
         _bandGains.value = gains
         engines.values.forEach { it.updateBands(gains, _bassBoostPercent.value) }
         syncCurrentStateToVolumePointIfNeeded()
+        saveActivePresetSlot()
         saveSettings(debounce = true)
     }
 
@@ -909,6 +885,7 @@ class AudioProcessorService : Service() {
         engines.values.forEach { it.updatePreAmpAndLimiter(db, _limiterEnabled.value) }
         _lastAdjustedParameterId.value = "pre_amp"
         syncCurrentStateToVolumePointIfNeeded()
+        saveActivePresetSlot()
         saveSettings(debounce = true)
     }
 
@@ -917,139 +894,73 @@ class AudioProcessorService : Service() {
         engines.values.forEach { it.updateBands(_bandGains.value, percent) }
         _lastAdjustedParameterId.value = "bass_boost"
         syncCurrentStateToVolumePointIfNeeded()
+        saveActivePresetSlot()
         saveSettings(debounce = true)
     }
 
     fun setLimiterEnabled(enabled: Boolean) {
         _limiterEnabled.value = enabled
         engines.values.forEach { it.updatePreAmpAndLimiter(_preAmpDb.value, enabled) }
+        saveActivePresetSlot()
         saveSettings()
     }
 
-    fun applyPreset(presetName: String) {
-        val preset = _allPresets.value.find { it.name.equals(presetName, ignoreCase = true) }
-            ?: _deletedPresets.value.find { it.name.equals(presetName, ignoreCase = true) }
-            ?: EqualizerDefaults.PRESETS.find { it.name.equals(presetName, ignoreCase = true) }
-            ?: return
-        _activePresetName.value = preset.name
-        _preAmpDb.value = preset.preAmpDb
-        _bassBoostPercent.value = preset.bassBoostPercent
-        _limiterEnabled.value = preset.limiterEnabled
-        updateBands(preset.bandGains)
-        engines.values.forEach { it.updatePreAmpAndLimiter(preset.preAmpDb, preset.limiterEnabled) }
+    fun selectPresetSlot(index: Int) {
+        if (index !in 0 until EqualizerDefaults.PRESET_SLOT_COUNT) return
+        val targetSlotName = presetSlotName(index)
+        if (_activePresetName.value == targetSlotName) return
+
+        saveActivePresetSlot()
+        val slot = _currentDevicePresetSlots.value[index]
+        if (slot != null) {
+            applyPresetSlotSettings(slot)
+        } else {
+            savePresetSlotSettings(index, currentPresetSlotSettings())
+        }
+        val slotName = targetSlotName
+        _activePresetName.value = slotName
+        TelemetryManager.currentPreset = slotName
         saveSettings()
         updateNotification()
-        AppLogger.log(tag, "Applied preset: ${preset.name}")
-        TelemetryManager.currentPreset = preset.name
+        AppLogger.log(tag, "Selected $slotName")
     }
 
-    fun saveCustomPreset(name: String): Boolean {
-        if (name.isBlank()) return false
-        val newPreset = EqualizerPreset(
-            name = name.trim(),
-            description = "Custom preset",
-            bandGains = _bandGains.value,
-            preAmpDb = _preAmpDb.value,
-            bassBoostPercent = _bassBoostPercent.value,
-            limiterEnabled = _limiterEnabled.value,
-            isCustom = true
-        )
-        val updated = _allPresets.value.filter { !it.name.equals(newPreset.name, ignoreCase = true) } + newPreset
-        _allPresets.value = updated
-        _customPresets.value = updated.filter { it.isCustom }
-        _activePresetName.value = newPreset.name
-        saveSettings()
-        savePresetLists()
-        AppLogger.log(tag, "Created preset: ${newPreset.name}")
-        return true
+    private fun presetSlotName(index: Int) = "Preset ${index + 1}"
+
+    private fun currentPresetSlotSettings() = EqualizerPresetSlot(
+        bandGains = _bandGains.value.toList(),
+        preAmpDb = _preAmpDb.value,
+        bassBoostPercent = _bassBoostPercent.value,
+        limiterEnabled = _limiterEnabled.value,
+        leftChannelVolume = _leftChannelVolume.value,
+        rightChannelVolume = _rightChannelVolume.value
+    )
+
+    private fun savePresetSlotSettings(index: Int, slot: EqualizerPresetSlot) {
+        val updatedSlots = _currentDevicePresetSlots.value.toMutableList()
+        updatedSlots[index] = slot
+        _currentDevicePresetSlots.value = updatedSlots
     }
 
-    // import an external preset into custom presets list
-    fun importPreset(preset: EqualizerPreset, applyNow: Boolean = false): Boolean {
-        val cleanPreset = preset.copy(isCustom = true)
-        val updated = _allPresets.value.filter { !it.name.equals(cleanPreset.name, ignoreCase = true) } + cleanPreset
-        _allPresets.value = updated
-        _customPresets.value = updated.filter { it.isCustom }
-        saveSettings()
-        savePresetLists()
-        AppLogger.log(tag, "Imported preset: ${cleanPreset.name}")
-        if (applyNow) {
-            applyPreset(cleanPreset.name)
-        }
-        return true
-    }
-
-    // import multiple external presets at once
-    fun importPresets(presets: List<EqualizerPreset>): Int {
-        if (presets.isEmpty()) return 0
-        var currentAll = _allPresets.value
-        var importedCount = 0
-        presets.forEach { p ->
-            val clean = p.copy(isCustom = true)
-            currentAll = currentAll.filter { !it.name.equals(clean.name, ignoreCase = true) } + clean
-            importedCount++
-        }
-        _allPresets.value = currentAll
-        _customPresets.value = currentAll.filter { it.isCustom }
-        saveSettings()
-        savePresetLists()
-        AppLogger.log(tag, "Imported $importedCount presets from pack")
-        return importedCount
-    }
-
-    fun reorderPresets(newOrder: List<EqualizerPreset>) {
-        _allPresets.value = newOrder
-        _customPresets.value = newOrder.filter { it.isCustom }
-        saveSettings()
-        savePresetLists()
-        AppLogger.log(tag, "Preset order updated: ${newOrder.map { it.name }}")
-    }
-
-    fun deletePreset(name: String) {
-        val toDelete = _allPresets.value.find { it.name.equals(name, ignoreCase = true) }
-        val updated = _allPresets.value.filter { !it.name.equals(name, ignoreCase = true) }
-        _allPresets.value = updated
-        _customPresets.value = updated.filter { it.isCustom }
-
-        if (toDelete != null) {
-            val updatedDeleted = _deletedPresets.value.filter { !it.name.equals(toDelete.name, ignoreCase = true) } + toDelete
-            _deletedPresets.value = updatedDeleted
-        }
-
-        if (_activePresetName.value.equals(name, ignoreCase = true)) {
-            val fallback = updated.firstOrNull()?.name ?: "Flat"
-            applyPreset(fallback)
-        }
-        saveSettings()
-        savePresetLists()
-        AppLogger.log(tag, "Deleted preset: $name")
-    }
-
-    fun restorePreset(presetName: String) {
-        val toRestore = _deletedPresets.value.find { it.name.equals(presetName, ignoreCase = true) }
-            ?: EqualizerDefaults.PRESETS.find { it.name.equals(presetName, ignoreCase = true) }
+    private fun saveActivePresetSlot() {
+        val index = (0 until EqualizerDefaults.PRESET_SLOT_COUNT)
+            .firstOrNull { _activePresetName.value == presetSlotName(it) }
             ?: return
-
-        _deletedPresets.value = _deletedPresets.value.filter { !it.name.equals(toRestore.name, ignoreCase = true) }
-        val updated = _allPresets.value.filter { !it.name.equals(toRestore.name, ignoreCase = true) } + toRestore
-        _allPresets.value = updated
-        _customPresets.value = updated.filter { it.isCustom }
-        saveSettings()
-        savePresetLists()
-        AppLogger.log(tag, "Restored preset: ${toRestore.name}")
+        savePresetSlotSettings(index, currentPresetSlotSettings())
     }
 
-    fun resetPresetsToDefault() {
-        _allPresets.value = EqualizerDefaults.PRESETS
-        _deletedPresets.value = emptyList()
-        _customPresets.value = emptyList()
-        saveSettings()
-        savePresetLists()
-        AppLogger.log(tag, "Reset presets to factory defaults")
-    }
-
-    fun deleteCustomPreset(name: String) {
-        deletePreset(name)
+    private fun applyPresetSlotSettings(slot: EqualizerPresetSlot) {
+        _bandGains.value = slot.bandGains
+        _preAmpDb.value = slot.preAmpDb
+        _bassBoostPercent.value = slot.bassBoostPercent
+        _limiterEnabled.value = slot.limiterEnabled
+        _leftChannelVolume.value = slot.leftChannelVolume
+        _rightChannelVolume.value = slot.rightChannelVolume
+        engines.values.forEach { engine ->
+            engine.updatePreAmpAndLimiter(slot.preAmpDb, slot.limiterEnabled)
+            engine.updateBands(slot.bandGains, slot.bassBoostPercent)
+            engine.updateChannelVolumes(slot.leftChannelVolume, slot.rightChannelVolume)
+        }
     }
 
     fun getDiagnosticsReport(): String {
@@ -1058,7 +969,7 @@ class AudioProcessorService : Service() {
         val logs = AppLogger.getLogs().takeLast(40).joinToString("\n")
 
         return buildString {
-            appendLine("=== allEQ SYSTEM DIAGNOSTIC REPORT ===")
+            appendLine("=== BETTER ANDROID SPEAKER ENHANCER SYSTEM DIAGNOSTIC REPORT ===")
             appendLine("Timestamp: ${java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US).format(java.util.Date())}")
             appendLine("[DEVICE SPECIFICATION]")
             appendLine("Manufacturer: ${Build.MANUFACTURER}")

@@ -1,17 +1,17 @@
 <resources>
-    <string name="app_name">BetterEQ</string>
+    <string name="app_name">Better Android Speaker Enhancer</string>
+    <string name="launcher_name">BASE EQ</string>
     
     <!-- Devices -->
     <string name="device_speaker">built-in speaker</string>
     <string name="device_bluetooth">bluetooth audio</string>
     <string name="device_wired">wired headphones</string>
     <string name="device_usb">usb-c audio</string>
-    <string name="device_presets_header">DEVICE PRESETS</string>
-    <string name="device_presets_customize">Customize</string>
-    <string name="device_presets_dialog_title">CUSTOMIZE QUICK PRESETS</string>
-    <string name="device_presets_dialog_desc">Select 3 presets for quick access on this output device:</string>
+    <string name="device_presets_header">PRESETS</string>
     <string name="active_output_header">ACTIVE OUTPUT</string>
     <string name="eq_profile_active">EQ Profile Active</string>
+    <string name="service_start">Start</string>
+    <string name="service_stop">Stop</string>
 
     <!-- Top Bar & Main Controls -->
     <string name="btn_new_preset">new</string>
@@ -109,7 +109,7 @@
     <string name="btn_reset_defaults">reset all presets to defaults</string>
     
     <!-- Tutorial Dialog -->
-    <string name="tutorial_title">allEQ SETUP</string>
+    <string name="tutorial_title">BETTER ANDROID SPEAKER ENHANCER SETUP</string>
     <string name="tutorial_subtitle">to ensure the equalizer works across all apps and stays active in the background, follow these simple steps:</string>
     <string name="tutorial_step1_title">SHIZUKU SERVICE</string>
     <string name="tutorial_step1_running">shizuku service is running and connected</string>
@@ -125,25 +125,18 @@
     <string name="tutorial_btn_close">got it, close</string>
     
     <!-- Preset Descriptions -->
-    <string name="preset_desc_flat">reference flat response without coloration</string>
-    <string name="preset_desc_bass_punch">tight focused punch without boominess</string>
-    <string name="preset_desc_vocal_clarity">crystal clear voice and dialogue intelligibility</string>
-    <string name="preset_desc_club">energetic sub-bass and sparkling highs</string>
-    <string name="preset_desc_rock">classic v-curve drive for guitars and drums</string>
-    <string name="preset_desc_cinematic">wide immersive soundstage for movies and videos</string>
-    <string name="preset_desc_acoustic">warm natural timbre of instruments</string>
     
     <!-- Toasts & Notifications -->
     <string name="toast_protection_activated">Background protection activated!</string>
     <string name="toast_report_copied">Diagnostic report copied to clipboard!</string>
-    <string name="notif_channel_name">allEQ Audio Processor</string>
+    <string name="notif_channel_name">Better Android Speaker Enhancer Audio Processor</string>
     <string name="notif_channel_desc">Background equalizer processing</string>
     <string name="notif_active_sessions">Active sessions: %1$d | %2$s</string>
     <string name="notif_enabled">Enabled (%1$s)</string>
     <string name="notif_disabled">Disabled</string>
     <string name="notif_action_enable">Enable</string>
     <string name="notif_action_disable">Disable</string>
-    <string name="oem_lock_hint">lock allEQ in recent apps (padlock icon) to prevent termination on swipe</string>
+    <string name="oem_lock_hint">lock Better Android Speaker Enhancer in recent apps (padlock icon) to prevent termination on swipe</string>
     
     <!-- Preset Export / Import -->
     <string name="btn_share_preset">share preset</string>
@@ -159,5 +152,5 @@
     <string name="toast_preset_imported">Preset \"%1$s\" imported!</string>
     <string name="toast_preset_pack_imported">%1$d presets imported!</string>
     <string name="toast_import_failed">Failed to read .alleq preset file</string>
-    <string name="share_preset_chooser_title">Share allEQ Preset</string>
+    <string name="share_preset_chooser_title">Share Better Android Speaker Enhancer Preset</string>
 </resources>

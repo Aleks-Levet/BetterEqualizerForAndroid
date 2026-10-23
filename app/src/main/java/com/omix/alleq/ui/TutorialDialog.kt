@@ -79,7 +79,7 @@ fun TutorialDialog(
                 Spacer(modifier = Modifier.height(12.dp))
 
                 Text(
-                    text = "allEQ SETUP",
+                    text = "BETTER ANDROID SPEAKER ENHANCER SETUP",
                     fontFamily = FontFamily.Default,
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Bold,

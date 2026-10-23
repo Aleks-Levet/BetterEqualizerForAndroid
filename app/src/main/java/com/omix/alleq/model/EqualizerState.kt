@@ -16,6 +16,15 @@ data class EqualizerPreset(
     val isCustom: Boolean = false
 )
 
+data class EqualizerPresetSlot(
+    val bandGains: List<Float>,
+    val preAmpDb: Float,
+    val bassBoostPercent: Float,
+    val limiterEnabled: Boolean,
+    val leftChannelVolume: Float,
+    val rightChannelVolume: Float
+)
+
 object EqualizerDefaults {
     val BANDS = listOf(
         EqualizerBand(0, 31, "31 Hz"),
@@ -30,64 +39,56 @@ object EqualizerDefaults {
         EqualizerBand(9, 16000, "16 kHz")
     )
 
-    val PRESETS = listOf(
-        EqualizerPreset(
-            name = "Flat",
-            description = "Reference flat response without coloration",
-            bandGains = listOf(0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f),
-            preAmpDb = 0f,
-            bassBoostPercent = 0f,
-            limiterEnabled = false
-        ),
-        EqualizerPreset(
-            name = "Bass Punch",
-            description = "Tight focused punch without boominess",
-            bandGains = listOf(-2f, 3f, 5f, 3f, 0f, -1f, 1f, 2f, 1f, 0f),
-            preAmpDb = 0f,
-            bassBoostPercent = 35f,
-            limiterEnabled = false
-        ),
-        EqualizerPreset(
-            name = "Vocal Clarity",
-            description = "Crystal clear voice and dialogue intelligibility",
-            bandGains = listOf(-5f, -2f, 0f, 1f, 3f, 4f, 3f, 2f, 0f, -1f),
-            preAmpDb = 0f,
-            bassBoostPercent = 0f,
-            limiterEnabled = false
-        ),
-        EqualizerPreset(
-            name = "Club",
-            description = "Energetic sub-bass and sparkling highs",
-            bandGains = listOf(2f, 4f, 4f, 1f, 0f, 1f, 2f, 3f, 4f, 4f),
-            preAmpDb = 0f,
-            bassBoostPercent = 35f,
-            limiterEnabled = false
-        ),
-        EqualizerPreset(
-            name = "Rock",
-            description = "Classic V-curve drive for guitars and drums",
-            bandGains = listOf(4f, 3f, 2f, 0f, -2f, -1f, 2f, 4f, 5f, 4f),
-            preAmpDb = 0f,
-            bassBoostPercent = 25f,
-            limiterEnabled = false
-        ),
-        EqualizerPreset(
-            name = "Cinematic",
-            description = "Wide immersive soundstage for movies and videos",
-            bandGains = listOf(2f, 2f, 1f, 0f, 1f, 2f, 3f, 3f, 2f, 1f),
-            preAmpDb = 1f,
-            bassBoostPercent = 20f,
-            limiterEnabled = false
-        ),
-        EqualizerPreset(
-            name = "Acoustic",
-            description = "Warm natural timbre of instruments",
-            bandGains = listOf(1f, 2f, 2f, 1f, 1f, 2f, 1f, 1f, 2f, 2f),
-            preAmpDb = 0f,
-            bassBoostPercent = 10f,
-            limiterEnabled = false
-        )
-    )
+    const val PRESET_SLOT_COUNT = 3
+
+    fun presetSlotsToJson(slots: List<EqualizerPresetSlot?>): String {
+        require(slots.size == PRESET_SLOT_COUNT)
+        return org.json.JSONArray().apply {
+            slots.forEach { slot ->
+                if (slot == null) {
+                    put(org.json.JSONObject.NULL)
+                } else {
+                    put(org.json.JSONObject().apply {
+                        put("bandGains", org.json.JSONArray().apply {
+                            slot.bandGains.forEach { put(it.toDouble()) }
+                        })
+                        put("preAmpDb", slot.preAmpDb.toDouble())
+                        put("bassBoostPercent", slot.bassBoostPercent.toDouble())
+                        put("limiterEnabled", slot.limiterEnabled)
+                        put("leftChannelVolume", slot.leftChannelVolume.toDouble())
+                        put("rightChannelVolume", slot.rightChannelVolume.toDouble())
+                    })
+                }
+            }
+        }.toString()
+    }
+
+    fun presetSlotsFromJson(json: String?): List<EqualizerPresetSlot?>? {
+        if (json.isNullOrBlank()) return null
+        return try {
+            val array = org.json.JSONArray(json)
+            if (array.length() != PRESET_SLOT_COUNT) return null
+            List(PRESET_SLOT_COUNT) { index ->
+                if (array.isNull(index)) {
+                    null
+                } else {
+                    val obj = array.getJSONObject(index)
+                    val gainsArray = obj.getJSONArray("bandGains")
+                    if (gainsArray.length() != BANDS.size) return null
+                    EqualizerPresetSlot(
+                        bandGains = List(gainsArray.length()) { gainsArray.getDouble(it).toFloat() },
+                        preAmpDb = obj.getDouble("preAmpDb").toFloat(),
+                        bassBoostPercent = obj.getDouble("bassBoostPercent").toFloat(),
+                        limiterEnabled = obj.getBoolean("limiterEnabled"),
+                        leftChannelVolume = obj.getDouble("leftChannelVolume").toFloat(),
+                        rightChannelVolume = obj.getDouble("rightChannelVolume").toFloat()
+                    )
+                }
+            }
+        } catch (_: org.json.JSONException) {
+            null
+        }
+    }
 
     fun customPresetsToJson(presets: List<EqualizerPreset>): String {
         val array = org.json.JSONArray()

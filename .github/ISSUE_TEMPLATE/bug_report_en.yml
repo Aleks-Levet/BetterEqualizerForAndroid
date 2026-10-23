@@ -1,5 +1,5 @@
 ﻿name: Bug Report (English)
-description: Report an issue or unexpected behavior in allEQ
+description: Report an issue or unexpected behavior in Better Android Speaker Enhancer
 title: "[Bug]: "
 labels: ["bug"]
 body:
@@ -23,7 +23,7 @@ body:
       placeholder: |
         1. Connect Bluetooth headphones
         2. Open music player and start playback
-        3. Switch preset in allEQ
+        3. Switch preset in Better Android Speaker Enhancer
     validations:
       required: true
   - type: dropdown
@@ -63,10 +63,10 @@ body:
   - type: textarea
     id: diagnostics-log
     attributes:
-      label: allEQ Diagnostic Report
-      description: Copy from allEQ Settings -> SYSTEM DIAGNOSTICS & LOGS and paste here.
+      label: Better Android Speaker Enhancer Diagnostic Report
+      description: Copy from Better Android Speaker Enhancer Settings -> SYSTEM DIAGNOSTICS & LOGS and paste here.
       placeholder: |
-        === allEQ DIAGNOSTIC REPORT ===
+        === BETTER ANDROID SPEAKER ENHANCER DIAGNOSTIC REPORT ===
         App Version: 1.0 (1)
         Device: V2314A (Vivo)
         Android: 14 (API 34)

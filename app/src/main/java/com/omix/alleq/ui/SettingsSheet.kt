@@ -153,7 +153,7 @@ fun SettingsSheet(
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
-                        text = "allEQ • DSP ENGINE",
+                        text = "Better Android Speaker Enhancer • DSP ENGINE",
                         fontFamily = FontFamily.Default,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
